@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}管理後台{% endblock %}
+{% block head %}
+<style>
+  .tab-btn { padding:8px 16px; border-radius:20px; border:1.5px solid var(--border); background:var(--card); color:var(--muted); font-size:.88rem; cursor:pointer; font-weight:600; transition:all .15s; }
+  .tab-btn.active { background:var(--light); border-color:var(--primary); color:var(--primary); }
+  .row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--light); }
+  .row:last-child { border-bottom:none; }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:200; align-items:center; justify-content:center; padding:16px; }
+  .overlay.open { display:flex; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page">
+  <h1 style="font-size:1.4rem;margin-bottom:20px;">⚙️ 管理後台</h1>
+
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+    <button class="tab-btn active" data-tab="import" onclick="switchTab('import')">📥 匯入</button>
+    <button class="tab-btn" data-tab="members" onclick="switchTab('members')">👥 成員點數</button>
+    <button class="tab-btn" data-tab="rewards" onclick="switchTab('rewards')">🎁 獎品</button>
+    <button class="tab-btn" data-tab="redemptions" onclick="switchTab('redemptions')">📦 兌換紀錄</button>
+  </div>
+
+  <!-- 匯入 -->
+  <div id="tab-import">
+    <div class="card">
+      <h3 style="margin-bottom:16px;">上傳 LINE 聊天記錄</h3>
+      <div class="form-group">
+        <label>選擇 .txt 檔案（LINE 群組匯出）</label>
+        <input type="file" id="import-file" accept=".txt" />
+      </div>
+      <button class="btn btn-primary" onclick="doImport()">開始匯入</button>
+      <div id="import-result" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <!-- 成員點數 -->
+  <div id="tab-members" style="display:none;">
+    <div style="margin-bottom:12px;">
+      <input id="member-search" placeholder="搜尋成員名稱或 M 編號…" oninput="filterMembers()" />
+    </div>
+    <div id="members-list"></div>
+
+    <!-- 補點 modal -->
+    <div id="point-modal" class="overlay">
+      <div class="card" style="width:100%;max-width:360px;margin:0;">
+        <h3 style="margin-bottom:16px;" id="modal-title">調整點數</h3>
+        <input type="hidden" id="modal-mno" />
+        <div class="form-group"><label>點數（正數增加，負數扣除）</label><input type="number" id="modal-delta" value="1" /></div>
+        <div class="form-group"><label>備註</label><input type="text" id="modal-note" placeholder="選填" /></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+          <button class="btn btn-primary btn-sm" onclick="submitPoint()">確認</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 獎品 -->
+  <div id="tab-rewards" style="display:none;">
+    <button class="btn btn-primary btn-sm" onclick="openRewardForm(null)" style="margin-bottom:12px;">＋ 新增獎品</button>
+    <div id="rewards-list"></div>
+
+    <div id="reward-modal" class="overlay">
+      <div class="card" style="width:100%;max-width:400px;margin:0;">
+        <h3 style="margin-bottom:16px;" id="reward-title">新增獎品</h3>
+        <input type="hidden" id="reward-id" />
+        <div class="form-group"><label>名稱</label><input id="r-name" /></div>
+        <div class="form-group"><label>說明</label><input id="r-desc" placeholder="選填" /></div>
+        <div class="form-group"><label>所需點數</label><input type="number" id="r-pts" value="5" min="1" /></div>
+        <div class="form-group"><label>庫存（-1=無限）</label><input type="number" id="r-stock" value="-1" /></div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="r-active" checked style="width:auto;padding:0;" />
+          <label for="r-active" style="display:inline;margin:0;">上架中</label>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-outline btn-sm" onclick="closeRewardModal()">取消</button>
+          <button class="btn btn-primary btn-sm" onclick="submitReward()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 兌換紀錄 -->
+  <div id="tab-redemptions" style="display:none;"><div id="redemptions-list"></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // ── 匯入 ──
+  async function doImport(){
+    const file=document.getElementById("import-file").files[0];
+    if(!file){ toast("請選擇 .txt 檔案"); return; }
+    const fd=new FormData(); fd.append("file",file);
+    document.getElementById("import-result").textContent="匯入中…";
+    const res=await fetch("/api/admin/import",{method:"POST",body:fd});
+    const data=await res.json();
+    if(data.error){ document.getElementById("import-result").innerHTML=`<span style="color:var(--red)">${esc(data.error)}</span>`; return; }
+    document.getElementById("import-result").innerHTML=
+      `<div class="badge badge-green" style="font-size:.9rem;padding:6px 14px;">
+        解析 ${data.total_parsed} 則・新增 ${data.inserted} 筆・跳過重複 ${data.skipped_duplicate} 筆
+      </div>`;
+  }
+
+  // ── 成員點數 ──
+  let allMembers=[];
+  async function loadMembers(){
+    const res=await fetch("/api/admin/users");
+    allMembers=await res.json();
+    filterMembers();
+  }
+  function filterMembers(){
+    const q=document.getElementById("member-search").value.toLowerCase();
+    const filtered=allMembers.filter(m=>(m.display_name||"").toLowerCase().includes(q)||String(m.member_number).includes(q));
+    const el=document.getElementById("members-list");
+    if(!filtered.length){ el.innerHTML=`<div class="muted" style="padding:20px;text-align:center;">沒有成員</div>`; return; }
+    el.innerHTML=`<div class="card">${filtered.map(m=>`
+      <div class="row">
+        <span style="font-size:.85rem;color:var(--muted);min-width:36px;">M${m.member_number}</span>
+        <span style="flex:1;font-size:.95rem;">${esc(m.display_name||"—")}</span>
+        <span style="font-weight:800;color:var(--primary);min-width:40px;text-align:right;">${m.points}</span>
+        <button class="btn btn-outline btn-sm" onclick="openPointModal(${m.member_number},'${esc(m.display_name||"")}')">調整</button>
+      </div>`).join("")}</div>`;
+  }
+  function openPointModal(mno,name){
+    document.getElementById("modal-mno").value=mno;
+    document.getElementById("modal-title").textContent=`調整 M${mno}「${name}」的點數`;
+    document.getElementById("modal-delta").value=1;
+    document.getElementById("modal-note").value="";
+    document.getElementById("point-modal").classList.add("open");
+  }
+  function closeModal(){ document.getElementById("point-modal").classList.remove("open"); }
+  async function submitPoint(){
+    const mno=parseInt(document.getElementById("modal-mno").value);
+    const delta=parseInt(document.getElementById("modal-delta").value);
+    const note=document.getElementById("modal-note").value;
+    if(!delta){ toast("請輸入非零整數"); return; }
+    const res=await fetch("/api/admin/point",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({member_number:mno,delta,note})});
+    const data=await res.json();
+    if(data.ok){ closeModal(); toast(`已調整！新點數：${data.new_points}`); loadMembers(); }
+    else toast("⚠️ "+data.error);
+  }
+
+  // ── 獎品 ──
+  async function loadRewards(){
+    const res=await fetch("/api/admin/rewards");
+    const rewards=await res.json();
+    const el=document.getElementById("rewards-list");
+    if(!rewards.length){ el.innerHTML=`<div class="muted" style="padding:20px;text-align:center;">尚無獎品</div>`; return; }
+    el.innerHTML=rewards.map(r=>`
+      <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;">${esc(r.name)}</div>
+          ${r.description?`<div class="muted">${esc(r.description)}</div>`:""}
+          <div class="muted">${r.points_required} 點・${r.stock===-1?"無限量":`庫存 ${r.remaining}/${r.stock}`}</div>
+        </div>
+        <span class="badge ${r.is_active?'badge-green':'badge-red'}">${r.is_active?"上架":"下架"}</span>
+        <button class="btn btn-outline btn-sm" onclick='openRewardForm(${JSON.stringify(r).replace(/"/g,"&quot;")})'>編輯</button>
+      </div>`).join("");
+  }
+  function openRewardForm(r){
+    document.getElementById("reward-title").textContent=r?"編輯獎品":"新增獎品";
+    document.getElementById("reward-id").value=r?r.id:"";
+    document.getElementById("r-name").value=r?r.name:"";
+    document.getElementById("r-desc").value=r?r.description:"";
+    document.getElementById("r-pts").value=r?r.points_required:5;
+    document.getElementById("r-stock").value=r?r.stock:-1;
+    document.getElementById("r-active").checked=r?r.is_active:true;
+    document.getElementById("reward-modal").classList.add("open");
+  }
+  function closeRewardModal(){ document.getElementById("reward-modal").classList.remove("open"); }
+  async function submitReward(){
+    const id=document.getElementById("reward-id").value;
+    const payload={name:document.getElementById("r-name").value.trim(),description:document.getElementById("r-desc").value.trim(),points_required:parseInt(document.getElementById("r-pts").value),stock:parseInt(document.getElementById("r-stock").value),is_active:document.getElementById("r-active").checked};
+    if(!payload.name){ toast("請輸入獎品名稱"); return; }
+    const url=id?`/api/admin/rewards/${id}`:"/api/admin/rewards";
+    const method=id?"PATCH":"POST";
+    const res=await fetch(url,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if(res.ok){ closeRewardModal(); toast("儲存成功"); loadRewards(); }
+    else { const d=await res.json(); toast("⚠️ "+(d.error||"失敗")); }
+  }
+
+  // ── 兌換紀錄 ──
+  async function loadRedemptions(){
+    const res=await fetch("/api/admin/redemptions");
+    const items=await res.json();
+    const el=document.getElementById("redemptions-list");
+    if(!items.length){ el.innerHTML=`<div class="muted" style="padding:20px;text-align:center;">尚無兌換紀錄</div>`; return; }
+    el.innerHTML=`<div class="card">${items.map(r=>`
+      <div class="row">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:.92rem;font-weight:600;">${r.member_number?`M${r.member_number} `:""}${esc(r.display_name)}</div>
+          <div class="muted">${esc(r.reward_name)}・${r.points_used} 點・${esc(r.created_at)}</div>
+        </div>
+        ${r.fulfilled
+          ?`<span class="badge badge-green">已發放</span>`
+          :`<button class="btn btn-success btn-sm" onclick="fulfill(${r.id})">標記發放</button>`}
+      </div>`).join("")}</div>`;
+  }
+  async function fulfill(id){
+    await fetch(`/api/admin/redemptions/${id}/fulfill`,{method:"POST"});
+    toast("已標記為發放");
+    loadRedemptions();
+  }
+
+  function switchTab(tab){
+    ["import","members","rewards","redemptions"].forEach(t=>{
+      document.querySelector(`[data-tab="${t}"]`).classList.toggle("active",t===tab);
+      document.getElementById(`tab-${t}`).style.display=t===tab?"":"none";
+    });
+    if(tab==="members") loadMembers();
+    if(tab==="rewards") loadRewards();
+    if(tab==="redemptions") loadRedemptions();
+  }
+</script>
+{% endblock %}

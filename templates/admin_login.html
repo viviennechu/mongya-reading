@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}管理員登入{% endblock %}
+{% block content %}
+<div class="page" style="max-width:400px;">
+  <div class="card" style="margin-top:40px;">
+    <h2 style="font-size:1.2rem;margin-bottom:20px;">⚙️ 管理員登入</h2>
+    <form method="POST" action="/admin/login">
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" name="password" autofocus />
+      </div>
+      {% if error %}<div style="color:var(--red);font-size:.9rem;margin-bottom:12px;">密碼錯誤，請再試一次</div>{% endif %}
+      <button type="submit" class="btn btn-primary" style="width:100%;">登入</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

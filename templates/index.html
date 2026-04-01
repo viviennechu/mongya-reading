@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}蒙芽共讀資料庫 — 搜尋{% endblock %}
+{% block head %}
+<style>
+  .chip { padding:5px 14px; border-radius:20px; border:1.5px solid var(--border); background:var(--card); color:var(--muted); font-size:.85rem; cursor:pointer; transition:all .15s; }
+  .chip:hover,.chip.active { background:var(--light); border-color:var(--primary); color:var(--primary); font-weight:600; }
+  .card-header { display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
+  .card-meta { font-size:.82rem; color:var(--muted); margin-top:4px; }
+  .card-content { font-size:.92rem; line-height:1.75; margin-top:10px; color:#4a3a28; white-space:pre-wrap; word-break:break-word; }
+  .book-title { font-size:1rem; font-weight:700; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page">
+  <h1 style="font-size:1.6rem;margin-bottom:4px;">📖 大家的共讀回憶</h1>
+  <p class="muted" style="margin-bottom:20px;">輸入關鍵字，找找大家讀過的書</p>
+
+  <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <input id="query" type="search" placeholder="書名、主題、作者…" autocomplete="off" inputmode="search" />
+    <button class="btn btn-primary" onclick="doSearch(1)" style="white-space:nowrap;">搜尋</button>
+  </div>
+
+  <div id="month-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">
+    <button class="chip active" data-month="">全部</button>
+    {% for m in range(1,13) %}<button class="chip" data-month="{{ m }}">{{ m }}月</button>{% endfor %}
+  </div>
+
+  <div id="status" class="muted" style="margin-bottom:12px;min-height:1.4em;"></div>
+  <div id="results"></div>
+  <div id="more-wrap" style="text-align:center;margin-top:16px;display:none;">
+    <button class="btn btn-outline" onclick="loadMore()">載入更多</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let curPage=1, curQ="", curMonth="", curTotal=0;
+
+  document.querySelectorAll(".chip").forEach(b=>{
+    b.addEventListener("click",()=>{
+      document.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));
+      b.classList.add("active");
+      curMonth=b.dataset.month;
+      doSearch(1);
+    });
+  });
+  document.getElementById("query").addEventListener("keydown",e=>{ if(e.key==="Enter") doSearch(1); });
+
+  async function doSearch(page){
+    curPage=page; curQ=document.getElementById("query").value.trim();
+    const status=document.getElementById("status");
+    const results=document.getElementById("results");
+    const more=document.getElementById("more-wrap");
+    if(page===1){ results.innerHTML=""; more.style.display="none"; }
+    status.textContent="搜尋中…";
+    const p=new URLSearchParams({page});
+    if(curQ) p.set("q",curQ);
+    if(curMonth) p.set("month",curMonth);
+    const res=await fetch("/api/search?"+p);
+    const data=await res.json();
+    curTotal=data.total;
+    if(data.total===0&&page===1){
+      status.textContent=curQ?`找不到「${curQ}」的共讀紀錄`:"還沒有共讀紀錄";
+      results.innerHTML=`<div style="text-align:center;padding:40px 0;color:var(--muted);">試試其他關鍵字 🌱</div>`;
+      return;
+    }
+    const loaded=(page-1)*20+data.results.length;
+    status.textContent=`共 ${data.total} 則，顯示 ${loaded} 則`;
+    results.insertAdjacentHTML("beforeend",data.results.map(r=>card(r,curQ)).join(""));
+    more.style.display=loaded<data.total?"block":"none";
+  }
+  function loadMore(){ doSearch(curPage+1); }
+
+  function card(r,q){
+    const month=r.month?`${r.month}月共讀`:"共讀";
+    const title=r.book_title?`<span class="book-title">${highlight(r.book_title,q)}</span>`:"";
+    const mno=r.member_number?`M${r.member_number} · `:"";
+    return `<div class="card">
+      <div class="card-header"><span class="badge">${esc(month)}</span>${title}</div>
+      <div class="card-meta">${mno}${esc(r.display_name||"成員")} · ${esc(r.created_at)}</div>
+      <div class="card-content">${highlight(r.content,q)}</div>
+    </div>`;
+  }
+
+  doSearch(1);
+</script>
+{% endblock %}
