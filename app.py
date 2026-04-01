@@ -1,5 +1,6 @@
 import os
 from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from flask import (
     Flask, request, abort, redirect, url_for,
@@ -205,6 +206,9 @@ def api_search():
 # ── 成員點數 API（Member point balance query）────────────────────
 @app.route("/api/member/<int:member_number>/points")
 def api_member_points(member_number: int):
+    # 只允許本人查詢
+    if session.get("member_number") != member_number:
+        return jsonify({"error": "請先登入"}), 401
     member = Member.query.filter_by(member_number=member_number).first()
     if not member:
         return jsonify({"error": "找不到此 M 編號"}), 404
@@ -252,6 +256,8 @@ def api_redeem(reward_id: int):
     member_number = data.get("member_number")
     if member_number is None:
         return jsonify({"error": "請提供 member_number"}), 400
+    if session.get("member_number") != int(member_number):
+        return jsonify({"error": "請先登入"}), 401
 
     member = Member.query.filter_by(member_number=int(member_number)).first()
     if not member:
@@ -289,6 +295,7 @@ def api_redeem(reward_id: int):
         member_id=member.id,
         reward_id=reward.id,
         points_used=reward.points_required,
+        redemption_url=reward.redemption_url or "",
     )
     db.session.add(redemption)
     db.session.commit()
@@ -432,7 +439,67 @@ def index():
 
 @app.route("/member")
 def member_page():
-    return render_template("member.html")
+    mno = session.get("member_number")
+    if not mno:
+        return redirect(url_for("member_login"))
+    member = Member.query.filter_by(member_number=mno).first()
+    if not member:
+        session.pop("member_number", None)
+        return redirect(url_for("member_login"))
+    return render_template("member.html", member=member)
+
+
+@app.route("/member/login", methods=["GET", "POST"])
+def member_login():
+    error = None
+    if request.method == "POST":
+        try:
+            mno = int(request.form.get("member_number", 0))
+        except ValueError:
+            mno = 0
+        pwd = request.form.get("password", "")
+        member = Member.query.filter_by(member_number=mno).first()
+        if member and member.password_hash and check_password_hash(member.password_hash, pwd):
+            session["member_number"] = mno
+            return redirect(url_for("member_page"))
+        error = "M 編號或密碼錯誤"
+    return render_template("member_login.html", error=error)
+
+
+@app.route("/member/register", methods=["GET", "POST"])
+def member_register():
+    error = None
+    if request.method == "POST":
+        try:
+            mno = int(request.form.get("member_number", 0))
+        except ValueError:
+            mno = 0
+        pwd = request.form.get("password", "")
+        pwd2 = request.form.get("password2", "")
+        if not mno or mno <= 0:
+            error = "請輸入有效的 M 編號"
+        elif len(pwd) < 4:
+            error = "密碼至少 4 個字"
+        elif pwd != pwd2:
+            error = "兩次密碼不一致"
+        else:
+            member = Member.query.filter_by(member_number=mno).first()
+            if not member:
+                error = "找不到此 M 編號，請確認後再試"
+            elif member.password_hash:
+                error = "此 M 編號已設定過密碼，請直接登入"
+            else:
+                member.password_hash = generate_password_hash(pwd)
+                db.session.commit()
+                session["member_number"] = mno
+                return redirect(url_for("member_page"))
+    return render_template("member_register.html", error=error)
+
+
+@app.route("/member/logout")
+def member_logout():
+    session.pop("member_number", None)
+    return redirect(url_for("member_login"))
 
 
 if __name__ == "__main__":

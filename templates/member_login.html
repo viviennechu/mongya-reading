@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}會員登入{% endblock %}
+{% block content %}
+<div class="page" style="max-width:400px;">
+  <div class="card" style="margin-top:40px;">
+    <h2 style="font-size:1.2rem;margin-bottom:20px;">⭐ 會員登入</h2>
+    <form method="POST" action="/member/login">
+      <div class="form-group">
+        <label>M 編號</label>
+        <input type="number" name="member_number" placeholder="例如：97" min="1" autofocus />
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" name="password" />
+      </div>
+      {% if error %}<div style="color:var(--red);font-size:.9rem;margin-bottom:12px;">{{ error }}</div>{% endif %}
+      <button type="submit" class="btn btn-primary" style="width:100%;">登入</button>
+    </form>
+    <div style="text-align:center;margin-top:16px;font-size:.9rem;color:var(--muted);">
+      還沒有密碼？<a href="/member/register" style="color:var(--primary);">申請帳號</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

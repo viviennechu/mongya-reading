@@ -65,8 +65,8 @@
       <a href="/" {% if request.endpoint=='index' %}class="active"{% endif %}>搜尋</a>
       <a href="/member" {% if request.endpoint=='member_page' %}class="active"{% endif %}>我的點數</a>
       {% if session.get('admin_authenticated') %}
-      <a href="/admin" {% if 'admin' in request.endpoint %}class="active"{% endif %}>後台</a>
-      <a href="/admin/logout">登出</a>
+      <a href="/admin" {% if request.endpoint and 'admin' in request.endpoint %}class="active"{% endif %}>後台</a>
+      <a href="/admin/logout">登出後台</a>
       {% endif %}
     </div>
   </nav>

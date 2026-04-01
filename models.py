@@ -16,6 +16,7 @@ class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     member_number = db.Column(db.Integer, unique=True, nullable=False)
     display_name = db.Column(db.String(128), default="")
+    password_hash = db.Column(db.String(256), nullable=True)   # 會員自設密碼
     created_at = db.Column(db.DateTime(timezone=True), default=tw_now)
 
     transactions = db.relationship("PointTransaction", backref="member", lazy="dynamic")
@@ -132,6 +133,7 @@ class Redemption(db.Model):
     reward_id = db.Column(db.Integer, db.ForeignKey("rewards.id"), nullable=False)
     points_used = db.Column(db.Integer, nullable=False)
     fulfilled = db.Column(db.Boolean, default=False, nullable=False)
+    redemption_url = db.Column(db.Text, default="")   # 兌換當下的連結快照
 
     def to_dict(self):
         return {
@@ -142,4 +144,5 @@ class Redemption(db.Model):
             "reward_name": self.reward.name if self.reward else "",
             "points_used": self.points_used,
             "fulfilled": self.fulfilled,
+            "redemption_url": self.redemption_url or "",
         }
