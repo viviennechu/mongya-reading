@@ -293,7 +293,11 @@ def api_redeem(reward_id: int):
     db.session.add(redemption)
     db.session.commit()
 
-    return jsonify({"ok": True, "message": "兌換成功！管理員將盡快為你處理 🎁"})
+    return jsonify({
+        "ok": True,
+        "message": "兌換成功！",
+        "redemption_url": reward.redemption_url or "",
+    })
 
 
 # ── 管理員 API ────────────────────────────────────────────────
@@ -364,6 +368,7 @@ def api_admin_reward_create():
         points_required=pts,
         stock=int(data.get("stock", -1)),
         is_active=bool(data.get("is_active", True)),
+        redemption_url=data.get("redemption_url", ""),
     )
     db.session.add(reward)
     db.session.commit()
@@ -390,6 +395,8 @@ def api_admin_reward_update(reward_id: int):
         reward.stock = int(data["stock"])
     if "is_active" in data:
         reward.is_active = bool(data["is_active"])
+    if "redemption_url" in data:
+        reward.redemption_url = data["redemption_url"]
     db.session.commit()
     return jsonify(reward.to_dict())
 

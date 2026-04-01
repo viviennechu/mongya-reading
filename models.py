@@ -98,6 +98,7 @@ class Reward(db.Model):
     points_required = db.Column(db.Integer, nullable=False)
     stock = db.Column(db.Integer, default=-1)      # -1 = 無限量
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    redemption_url = db.Column(db.Text, default="")   # 兌換成功後顯示的連結
 
     redemptions = db.relationship("Redemption", backref="reward", lazy="dynamic")
 
@@ -117,6 +118,7 @@ class Reward(db.Model):
             "stock": self.stock,
             "remaining": self.remaining,
             "is_active": self.is_active,
+            "redemption_url": self.redemption_url or "",
         }
 
 

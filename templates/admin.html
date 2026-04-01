@@ -69,6 +69,7 @@
         <div class="form-group"><label>說明</label><input id="r-desc" placeholder="選填" /></div>
         <div class="form-group"><label>所需點數</label><input type="number" id="r-pts" value="5" min="1" /></div>
         <div class="form-group"><label>庫存（-1=無限）</label><input type="number" id="r-stock" value="-1" /></div>
+        <div class="form-group"><label>兌換成功後顯示的連結（選填）</label><input type="url" id="r-url" placeholder="https://drive.google.com/..." /></div>
         <div class="form-group" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="r-active" checked style="width:auto;padding:0;" />
           <label for="r-active" style="display:inline;margin:0;">上架中</label>
@@ -166,12 +167,13 @@
     document.getElementById("r-pts").value=r?r.points_required:5;
     document.getElementById("r-stock").value=r?r.stock:-1;
     document.getElementById("r-active").checked=r?r.is_active:true;
+    document.getElementById("r-url").value=r?r.redemption_url:"";
     document.getElementById("reward-modal").classList.add("open");
   }
   function closeRewardModal(){ document.getElementById("reward-modal").classList.remove("open"); }
   async function submitReward(){
     const id=document.getElementById("reward-id").value;
-    const payload={name:document.getElementById("r-name").value.trim(),description:document.getElementById("r-desc").value.trim(),points_required:parseInt(document.getElementById("r-pts").value),stock:parseInt(document.getElementById("r-stock").value),is_active:document.getElementById("r-active").checked};
+    const payload={name:document.getElementById("r-name").value.trim(),description:document.getElementById("r-desc").value.trim(),points_required:parseInt(document.getElementById("r-pts").value),stock:parseInt(document.getElementById("r-stock").value),is_active:document.getElementById("r-active").checked,redemption_url:document.getElementById("r-url").value.trim()};
     if(!payload.name){ toast("請輸入獎品名稱"); return; }
     const url=id?`/api/admin/rewards/${id}`:"/api/admin/rewards";
     const method=id?"PATCH":"POST";

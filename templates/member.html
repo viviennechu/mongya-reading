@@ -131,7 +131,14 @@
     if(!confirm(`確定要用 ${pts} 點兌換「${name}」嗎？`)) return;
     const res=await fetch(`/api/redeem/${rid}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({member_number:curMno})});
     const data=await res.json();
-    if(data.ok){ toast(data.message); await lookup(); }
+    if(data.ok){
+      if(data.redemption_url){
+        toast(`兌換成功！<br><a href="${data.redemption_url}" target="_blank" style="color:var(--primary);text-decoration:underline;">點此取得兌換內容 🎁</a>`, 8000);
+      } else {
+        toast("兌換成功！管理員將盡快為你處理 🎁");
+      }
+      await lookup();
+    }
     else toast("⚠️ "+data.error);
   }
 

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>共讀回憶搜尋</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f0eb;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    .container { max-width: 640px; margin: 0 auto; }
+
+    h1 {
+      font-size: 1.5rem;
+      color: #3a3020;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 0.9rem;
+      color: #7a6a58;
+      margin-bottom: 20px;
+    }
+
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .search-bar input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #d4c4b0;
+      border-radius: 12px;
+      font-size: 1rem;
+      background: #fff;
+      color: #3a3020;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-bar input:focus { border-color: #a07848; }
+    .search-bar button {
+      padding: 12px 20px;
+      background: #a07848;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .search-bar button:hover { background: #7a5830; }
+
+    #status {
+      font-size: 0.9rem;
+      color: #7a6a58;
+      margin-bottom: 16px;
+      min-height: 1.4em;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .badge {
+      background: #f0e8d8;
+      color: #a07848;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+    .book-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #3a3020;
+    }
+    .meta {
+      font-size: 0.8rem;
+      color: #a09080;
+      margin-top: 2px;
+    }
+    .content {
+      font-size: 0.92rem;
+      color: #5a4a38;
+      line-height: 1.7;
+      margin-top: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    /* 關鍵字高亮 */
+    mark {
+      background: #ffe09a;
+      border-radius: 3px;
+      padding: 0 2px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 40px 0;
+      color: #a09080;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📚 共讀回憶搜尋</h1>
+    <p class="subtitle">輸入關鍵字，找找大家的共讀故事</p>
+
+    <div class="search-bar">
+      <input
+        id="query"
+        type="search"
+        placeholder="例如：十二生肖、梵谷、繪本…"
+        autocomplete="off"
+        inputmode="search"
+      />
+      <button onclick="doSearch()">搜尋</button>
+    </div>
+
+    <div id="status"></div>
+    <div id="results"></div>
+  </div>
+
+  <script>
+    const input = document.getElementById("query");
+    input.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+
+    function highlight(text, q) {
+      if (!q) return escHtml(text);
+      const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return escHtml(text).replace(new RegExp(safe, "gi"), m => `<mark>${m}</mark>`);
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    async function doSearch() {
+      const q = input.value.trim();
+      const status = document.getElementById("status");
+      const results = document.getElementById("results");
+
+      if (!q) { status.textContent = "請輸入關鍵字"; return; }
+
+      status.textContent = "搜尋中…";
+      results.innerHTML = "";
+
+      try {
+        const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+
+        if (data.length === 0) {
+          status.textContent = `找不到「${q}」的相關共讀`;
+          results.innerHTML = `<div class="empty">試試其他關鍵字 🌱</div>`;
+          return;
+        }
+
+        status.textContent = `找到 ${data.length} 則共讀回憶`;
+
+        results.innerHTML = data.map(row => {
+          const month = row["月份"] ? `${row["月份"]}月共讀` : "共讀";
+          const title = row["書名"] || "";
+          const content = row["內文"] || "";
+          const sender = row["發送者"] || "成員";
+          const time = row["時間"] ? row["時間"].slice(0, 10) : "";
+
+          return `
+            <div class="card">
+              <div class="card-header">
+                <span class="badge">${escHtml(month)}</span>
+                ${title ? `<span class="book-title">${highlight(title, q)}</span>` : ""}
+              </div>
+              <div class="meta">${escHtml(sender)}${time ? ` ・ ${escHtml(time)}` : ""}</div>
+              <div class="content">${highlight(content, q)}</div>
+            </div>
+          `;
+        }).join("");
+
+      } catch (err) {
+        status.textContent = "搜尋失敗，請稍後再試";
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>

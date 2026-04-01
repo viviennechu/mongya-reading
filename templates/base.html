@@ -49,12 +49,12 @@
     #toast {
       position:fixed; bottom:24px; left:50%;
       transform:translateX(-50%) translateY(20px);
-      background:#333; color:#fff; padding:10px 20px;
+      background:#333; color:#fff; padding:12px 22px;
       border-radius:20px; font-size:.9rem; opacity:0;
       transition:opacity .3s,transform .3s; z-index:9999;
-      pointer-events:none; white-space:nowrap;
+      pointer-events:none; white-space:normal; max-width:90vw; text-align:center; line-height:1.6;
     }
-    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -75,7 +75,7 @@
   <script>
     function toast(msg, ms=2800) {
       const el=document.getElementById("toast");
-      el.textContent=msg; el.classList.add("show");
+      el.innerHTML=msg; el.classList.add("show");
       setTimeout(()=>el.classList.remove("show"),ms);
     }
     function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
