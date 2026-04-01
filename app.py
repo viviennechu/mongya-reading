@@ -119,17 +119,21 @@ def import_records(records: list) -> dict:
         )
         db.session.add(reading)
 
-        # auto-award point on import
+        # auto-award point on import — 每月每人最多 +1 點
         if member is not None:
-            label = f"{rec['month']}月共讀"
-            if rec.get("book_title"):
-                label += f"《{rec['book_title']}》"
-            tx = PointTransaction(
-                member_id=member.id,
-                delta=1,
-                reason=label,
-            )
-            db.session.add(tx)
+            month_label = f"{rec['month']}月共讀"
+            already_awarded = PointTransaction.query.filter(
+                PointTransaction.member_id == member.id,
+                PointTransaction.reason.like(f"{rec['month']}月共讀%"),
+                PointTransaction.delta > 0,
+            ).first()
+            if not already_awarded:
+                tx = PointTransaction(
+                    member_id=member.id,
+                    delta=1,
+                    reason=month_label,
+                )
+                db.session.add(tx)
 
         inserted += 1
 
