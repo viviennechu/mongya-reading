@@ -1,85 +1,71 @@
-# LINE 共讀小幫手
+# 蒙芽共讀資料庫
 
-偵測社群中「X月共讀」格式訊息，自動記錄到 Google Sheets，並提供關鍵字搜尋網頁。
+LINE 群組「孩子在蒙芽」的共讀記錄與集點系統。  
+管理員每月匯入 LINE 聊天記錄 → 自動解析共讀訊息 → 發點數 → 成員可查詢點數與兌換獎品。
 
----
-
-## 部署前準備
-
-### 1. LINE Developers Console
-
-1. 前往 https://developers.line.biz → 建立 Provider → 建立 Messaging API Channel
-2. 在 Channel settings 頁面取得：
-   - **Channel Secret**
-   - **Channel Access Token**（長期）
-3. 在 Messaging API 設定中關閉「Auto-reply messages」
-
-### 2. Google Sheets + Service Account
-
-1. 在 Google Cloud Console 建立專案 → 啟用 **Google Sheets API**
-2. 建立 **Service Account** → 下載 JSON 金鑰檔案
-3. 建立一個新的 Google 試算表 → 把 Service Account 的 email 加為「編輯者」
-4. 試算表 ID 就是網址中 `/d/` 和 `/edit` 之間那段
-
-### 3. 部署到 Railway
-
-1. 把這個資料夾推到 GitHub repo
-2. 在 Railway 建立新專案 → 連結 GitHub repo
-3. 在 Railway 的 Variables 頁面設定以下環境變數：
-
-```
-LINE_CHANNEL_SECRET=...
-LINE_CHANNEL_ACCESS_TOKEN=...
-GOOGLE_SHEETS_ID=...
-GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}  ← 整個 JSON 貼成一行
-```
-
-4. 部署完成後取得 Railway 給的網址（例如 `https://xxx.railway.app`）
-
-### 4. 設定 LINE Webhook
-
-1. 回到 LINE Developers Console
-2. Webhook URL 填入：`https://xxx.railway.app/callback`
-3. 開啟「Use webhook」
-4. 點「Verify」確認連線成功
-
-### 5. 把機器人加入 LINE 社群
-
-- 在機器人的 Messaging API 設定中，確認 **Group chat** 已開啟
-- 用 QR Code 或連結邀請機器人進入社群
+**線上網址**：`https://web-production-47e98.up.railway.app`
 
 ---
 
-## 使用方式
+## 現有功能
 
-成員在群組貼出含有以下格式的訊息，機器人就會自動記錄：
+### 共讀資料庫（首頁 `/`）
+- 關鍵字搜尋（書名、主題、作者）
+- 按月份篩選（1–12月）
+- 分頁載入
 
-```
-【2月共讀】
-內文...
-```
+### 我的點數（`/member`）
+- 輸入 M 編號查詢點數餘額
+- 查看點數明細紀錄
+- 查看兌換紀錄（含發放狀態）
+- 自助兌換獎品（點數足夠才能按）
 
-或
-
-```
-[3月共讀] 書名
-內文...
-```
-
-機器人會回覆「✅ 已記錄！」確認。
-
-**搜尋網頁**：`https://xxx.railway.app/`
+### 管理後台（`/admin`）
+- 密碼登入保護（`ADMIN_PASSWORD` 環境變數）
+- **匯入** LINE 聊天記錄 `.txt` → 自動解析共讀訊息 → 每月每人最多 +1 點
+  - 重複匯入自動去重，不重複計點
+  - 識別格式：`【X月共讀】`、`[X月共讀]`、`X月共讀：`、`X月共讀分享：`
+  - 成員識別：顯示名稱中的 M 編號（如 M097_小羽睿睿媽咪）
+- **成員點數**：手動加點 / 扣點（附備註）
+- **獎品管理**：新增／編輯獎品（名稱、所需點數、庫存）
+- **兌換紀錄**：查看所有兌換，標記已發放
 
 ---
 
-## Google Sheets 欄位說明
+## 技術架構
 
-| 欄位 | 說明 |
+| 項目 | 技術 |
 |------|------|
-| 時間戳記 | 台灣時間 |
-| 月份 | 1–12 |
-| 書名 | 標籤後第一行（可空白） |
-| 內文 | 完整訊息本文 |
-| 發送者名稱 | LINE 顯示名稱 |
-| 發送者ID | LINE user ID |
-| 訊息ID | 用於去重，避免重複記錄 |
+| 後端 | Python Flask + SQLAlchemy |
+| 資料庫 | PostgreSQL（Railway 托管） |
+| 前端 | Jinja2 模板 + 原生 Fetch API |
+| 部署 | Railway（GitHub 自動部署） |
+
+---
+
+## 環境變數
+
+| 變數 | 說明 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 連線字串（Railway 自動注入） |
+| `FLASK_SECRET_KEY` | Flask Session 加密金鑰 |
+| `ADMIN_PASSWORD` | 管理後台登入密碼 |
+
+---
+
+## 每月匯入流程
+
+1. 在 LINE 群組點右上角 → 匯出聊天記錄 → 存成 `.txt`
+2. 進入 `/admin` → 輸入密碼登入
+3. 選「匯入」tab → 上傳 `.txt` 檔 → 點「開始匯入」
+4. 系統會顯示：解析幾則、新增幾筆、跳過重複幾筆
+
+> 每月每位成員最多只會得 1 點，重複匯入不會重複計點。
+
+---
+
+## 待辦 / 未來規劃
+
+- [ ] 後台可直接搜尋 / 刪除特定共讀紀錄
+- [ ] 匯入時顯示詳細的成員點數異動摘要
+- [ ] 成員頁面支援姓名搜尋（不只限 M 編號）
