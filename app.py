@@ -439,6 +439,60 @@ def api_admin_redemptions():
     return jsonify([r.to_dict() for r in redemptions])
 
 
+@app.route("/api/admin/batch-point", methods=["POST"])
+@admin_required
+def api_admin_batch_point():
+    """批次加點：給指定 M 編號名單加點。"""
+    data = request.get_json(force=True) or {}
+    raw = data.get("member_numbers", "")
+    delta = data.get("delta")
+    note = data.get("note", "")
+    try:
+        delta = int(delta)
+    except (ValueError, TypeError):
+        return jsonify({"error": "delta 必須為整數"}), 400
+    if delta == 0:
+        return jsonify({"error": "delta 不可為 0"}), 400
+
+    # 解析 M 編號（逗號、空白、換行分隔）
+    import re as _re
+    mnos = [int(x) for x in _re.split(r"[\s,，]+", str(raw).strip()) if x.strip().isdigit()]
+    if not mnos:
+        return jsonify({"error": "請輸入至少一個 M 編號"}), 400
+
+    ok, missing = [], []
+    for mno in mnos:
+        member = Member.query.filter_by(member_number=mno).first()
+        if not member:
+            missing.append(mno)
+            continue
+        db.session.add(PointTransaction(member_id=member.id, delta=delta, reason=note or "批次加點"))
+        ok.append(mno)
+    db.session.commit()
+    return jsonify({"ok": True, "success": len(ok), "missing": missing})
+
+
+@app.route("/api/admin/all-point", methods=["POST"])
+@admin_required
+def api_admin_all_point():
+    """全體加點：給所有成員加點。"""
+    data = request.get_json(force=True) or {}
+    delta = data.get("delta")
+    note = data.get("note", "")
+    try:
+        delta = int(delta)
+    except (ValueError, TypeError):
+        return jsonify({"error": "delta 必須為整數"}), 400
+    if delta == 0:
+        return jsonify({"error": "delta 不可為 0"}), 400
+
+    members = Member.query.all()
+    for member in members:
+        db.session.add(PointTransaction(member_id=member.id, delta=delta, reason=note or "全體加點"))
+    db.session.commit()
+    return jsonify({"ok": True, "count": len(members)})
+
+
 @app.route("/api/admin/sync-members", methods=["POST"])
 @admin_required
 def api_admin_sync_members():

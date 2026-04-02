@@ -42,6 +42,42 @@
 
   <!-- 成員點數 -->
   <div id="tab-members" style="display:none;">
+
+    <!-- 批次加點 -->
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <h3 style="margin:0;">批次加點</h3>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-outline btn-sm" onclick="toggleBatch('batch')" id="btn-batch">＋ 指定名單</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleBatch('all')" id="btn-all">🌐 全體加點</button>
+        </div>
+      </div>
+
+      <!-- 指定名單 -->
+      <div id="batch-panel" style="display:none;">
+        <div class="form-group">
+          <label>M 編號（逗號或換行分隔）</label>
+          <textarea id="batch-mnos" rows="3" placeholder="例：6, 7, 12&#10;或每行一個"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div class="form-group" style="flex:1;margin:0;"><label>點數</label><input type="number" id="batch-delta" value="1" /></div>
+          <div class="form-group" style="flex:2;margin:0;"><label>備註</label><input type="text" id="batch-note" placeholder="例：萬聖節活動加點" /></div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="doBatch()">執行</button>
+        <div id="batch-result" style="margin-top:8px;font-size:.88rem;"></div>
+      </div>
+
+      <!-- 全體 -->
+      <div id="all-panel" style="display:none;">
+        <div style="display:flex;gap:8px;">
+          <div class="form-group" style="flex:1;margin:0;"><label>點數</label><input type="number" id="all-delta" value="1" /></div>
+          <div class="form-group" style="flex:2;margin:0;"><label>備註</label><input type="text" id="all-note" placeholder="例：購買教材贈點" /></div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="doAllPoint()">執行（全體）</button>
+        <div id="all-result" style="margin-top:8px;font-size:.88rem;"></div>
+      </div>
+    </div>
+
     <div style="margin-bottom:12px;">
       <input id="member-search" placeholder="搜尋成員名稱或 M 編號…" oninput="filterMembers()" />
     </div>
@@ -120,6 +156,36 @@
       `<div class="badge badge-green" style="font-size:.9rem;padding:6px 14px;">
         解析 ${data.total_parsed} 則・新增 ${data.inserted} 筆・跳過重複 ${data.skipped_duplicate} 筆
       </div>`;
+  }
+
+  // ── 批次加點 ──
+  function toggleBatch(type) {
+    const show = type === 'batch';
+    document.getElementById('batch-panel').style.display = show ? '' : 'none';
+    document.getElementById('all-panel').style.display = show ? 'none' : '';
+  }
+  async function doBatch() {
+    const mnos = document.getElementById('batch-mnos').value;
+    const delta = parseInt(document.getElementById('batch-delta').value);
+    const note = document.getElementById('batch-note').value;
+    const res = await fetch('/api/admin/batch-point', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({member_numbers:mnos, delta, note}) });
+    const data = await res.json();
+    const el = document.getElementById('batch-result');
+    if (data.ok) {
+      el.style.color = 'var(--green)';
+      el.textContent = `✓ 成功 ${data.success} 人${data.missing.length ? '，找不到 M 編號：' + data.missing.join(', ') : ''}`;
+      loadMembers();
+    } else { el.style.color='var(--red)'; el.textContent='⚠️ '+data.error; }
+  }
+  async function doAllPoint() {
+    const delta = parseInt(document.getElementById('all-delta').value);
+    const note = document.getElementById('all-note').value;
+    if (!confirm(`確定要給全體成員加 ${delta} 點嗎？`)) return;
+    const res = await fetch('/api/admin/all-point', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({delta, note}) });
+    const data = await res.json();
+    const el = document.getElementById('all-result');
+    if (data.ok) { el.style.color='var(--green)'; el.textContent=`✓ 已給 ${data.count} 位成員加點`; loadMembers(); }
+    else { el.style.color='var(--red)'; el.textContent='⚠️ '+data.error; }
   }
 
   // ── 成員點數 ──
