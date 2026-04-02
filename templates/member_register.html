@@ -18,6 +18,10 @@
         <label>再輸入一次密碼</label>
         <input type="password" name="password2" />
       </div>
+      <div class="form-group">
+        <label>Gmail（選填，用來接收雲端教材）</label>
+        <input type="email" name="gmail" placeholder="例如：your@gmail.com" />
+      </div>
       {% if error %}<div style="color:var(--red);font-size:.9rem;margin-bottom:12px;">{{ error }}</div>{% endif %}
       <button type="submit" class="btn btn-primary" style="width:100%;">申請並登入</button>
     </form>

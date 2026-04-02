@@ -17,6 +17,7 @@ class Member(db.Model):
     member_number = db.Column(db.Integer, unique=True, nullable=False)
     display_name = db.Column(db.String(128), default="")
     password_hash = db.Column(db.String(256), nullable=True)   # 會員自設密碼
+    gmail = db.Column(db.String(256), nullable=True)            # 收雲端檔案用
     created_at = db.Column(db.DateTime(timezone=True), default=tw_now)
 
     transactions = db.relationship("PointTransaction", backref="member", lazy="dynamic")
@@ -34,6 +35,7 @@ class Member(db.Model):
             "id": self.id,
             "member_number": self.member_number,
             "display_name": self.display_name,
+            "gmail": self.gmail or "",
             "points": self.points,
         }
 

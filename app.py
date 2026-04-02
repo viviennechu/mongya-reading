@@ -490,10 +490,30 @@ def member_register():
                 error = "此 M 編號已設定過密碼，請直接登入"
             else:
                 member.password_hash = generate_password_hash(pwd)
+                gmail = request.form.get("gmail", "").strip()
+                if gmail:
+                    member.gmail = gmail
                 db.session.commit()
                 session["member_number"] = mno
                 return redirect(url_for("member_page"))
     return render_template("member_register.html", error=error)
+
+
+@app.route("/api/member/gmail", methods=["POST"])
+def api_member_update_gmail():
+    mno = session.get("member_number")
+    if not mno:
+        return jsonify({"error": "請先登入"}), 401
+    data = request.get_json(force=True) or {}
+    gmail = data.get("gmail", "").strip()
+    if gmail and "@" not in gmail:
+        return jsonify({"error": "Gmail 格式不正確"}), 400
+    member = Member.query.filter_by(member_number=mno).first()
+    if not member:
+        return jsonify({"error": "找不到成員"}), 404
+    member.gmail = gmail or None
+    db.session.commit()
+    return jsonify({"ok": True, "gmail": member.gmail or ""})
 
 
 @app.route("/member/logout")

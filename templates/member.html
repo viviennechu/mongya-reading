@@ -27,6 +27,16 @@
     <a href="/member/logout" class="btn btn-outline btn-sm" style="margin-left:auto;">登出</a>
   </div>
 
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:.9rem;font-weight:600;margin-bottom:8px;">📧 我的 Gmail（用來接收雲端教材）</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="gmail-input" type="email" value="{{ member.gmail or '' }}" placeholder="your@gmail.com"
+        style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);font-size:.95rem;" />
+      <button class="btn btn-primary btn-sm" onclick="saveGmail()">儲存</button>
+    </div>
+    <div id="gmail-msg" style="font-size:.82rem;margin-top:6px;color:var(--muted);"></div>
+  </div>
+
   <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
     <button class="tab-btn active" data-tab="redeem" onclick="switchTab('redeem')">🎁 兌換獎品</button>
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">📋 點數紀錄</button>
@@ -127,6 +137,15 @@
       document.querySelector(`[data-tab="${t}"]`).classList.toggle("active", t === tab);
       document.getElementById(`tab-${t}`).style.display = t === tab ? "" : "none";
     });
+  }
+
+  async function saveGmail() {
+    const gmail = document.getElementById("gmail-input").value.trim();
+    const msg = document.getElementById("gmail-msg");
+    const res = await fetch("/api/member/gmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gmail }) });
+    const data = await res.json();
+    if (data.ok) { msg.style.color = "var(--green)"; msg.textContent = "✓ 已儲存"; }
+    else { msg.style.color = "var(--red)"; msg.textContent = data.error; }
   }
 
   loadPoints();
