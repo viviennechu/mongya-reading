@@ -1,6 +1,9 @@
 import os
+import json
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 from flask import (
     Flask, request, abort, redirect, url_for,
@@ -37,6 +40,22 @@ with app.app_context():
 
 # ── 管理員驗證（admin authentication / 管理員驗證）────────────────
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+SHEETS_ID = "1a3OiKsBxSJt-YXkvNcnoTfP39ySL1aCG8Wk6Xh3dSGY"
+
+def get_drive_service():
+    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    scopes = [
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+    ]
+    if sa_json:
+        info = json.loads(sa_json)
+        creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
+    else:
+        creds = service_account.Credentials.from_service_account_file(
+            os.path.expanduser("~/Downloads/monya-492013-4490bf83f33c.json"), scopes=scopes
+        )
+    return creds
 
 
 def admin_required(f):
@@ -418,6 +437,51 @@ def api_admin_redemptions():
         .all()
     )
     return jsonify([r.to_dict() for r in redemptions])
+
+
+@app.route("/api/admin/sync-members", methods=["POST"])
+@admin_required
+def api_admin_sync_members():
+    """從 Google Sheets 同步成員名單（欄A=顯示名稱, 欄B=M編號）。"""
+    try:
+        creds = get_drive_service()
+        sheets = build("sheets", "v4", credentials=creds)
+        result = sheets.spreadsheets().values().get(
+            spreadsheetId=SHEETS_ID,
+            range="工作表1!A2:B",  # 跳過標題列
+        ).execute()
+        rows = result.get("values", [])
+    except Exception as e:
+        return jsonify({"error": f"讀取 Google Sheets 失敗：{e}"}), 500
+
+    created = 0
+    updated = 0
+    skipped = 0
+
+    for row in rows:
+        if len(row) < 2:
+            continue
+        display_name = str(row[0]).strip()
+        try:
+            mno = int(str(row[1]).strip())
+        except ValueError:
+            continue
+        if not display_name or mno <= 0:
+            continue
+
+        member = Member.query.filter_by(member_number=mno).first()
+        if member is None:
+            member = Member(member_number=mno, display_name=display_name)
+            db.session.add(member)
+            created += 1
+        elif member.display_name != display_name:
+            member.display_name = display_name
+            updated += 1
+        else:
+            skipped += 1
+
+    db.session.commit()
+    return jsonify({"ok": True, "created": created, "updated": updated, "skipped": skipped})
 
 
 @app.route("/api/admin/redemptions/<int:redemption_id>/fulfill", methods=["POST"])

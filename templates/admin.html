@@ -23,6 +23,12 @@
 
   <!-- 匯入 -->
   <div id="tab-import">
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:8px;">👥 同步成員名單</h3>
+      <p class="muted" style="font-size:.88rem;margin-bottom:12px;">從 Google Sheets 讀取最新名單，自動新增或更新成員（不會刪除現有成員）</p>
+      <button class="btn btn-primary" onclick="doSync()" id="sync-btn">同步名單</button>
+      <div id="sync-result" style="margin-top:12px;"></div>
+    </div>
     <div class="card">
       <h3 style="margin-bottom:16px;">上傳 LINE 聊天記錄</h3>
       <div class="form-group">
@@ -88,6 +94,19 @@
 {% endblock %}
 {% block scripts %}
 <script>
+  // ── 同步名單 ──
+  async function doSync(){
+    const btn=document.getElementById("sync-btn");
+    const result=document.getElementById("sync-result");
+    btn.disabled=true; btn.textContent="同步中…";
+    result.textContent="";
+    const res=await fetch("/api/admin/sync-members",{method:"POST"});
+    const data=await res.json();
+    btn.disabled=false; btn.textContent="同步名單";
+    if(data.error){ result.innerHTML=`<span style="color:var(--red)">${esc(data.error)}</span>`; return; }
+    result.innerHTML=`<div class="badge badge-green" style="font-size:.9rem;padding:6px 14px;">新增 ${data.created} 人・更新名稱 ${data.updated} 人・無變動 ${data.skipped} 人</div>`;
+  }
+
   // ── 匯入 ──
   async function doImport(){
     const file=document.getElementById("import-file").files[0];
