@@ -10,7 +10,7 @@ from flask import (
     session, jsonify, render_template,
 )
 
-from models import db, Member, Reading, PointTransaction, Reward, Redemption, LibraryArticle
+from models import db, Member, Reading, PointTransaction, Reward, Redemption, LibraryArticle, RecommendedBook
 from parser import parse_chat_export, compute_content_hash
 
 # ── Flask 初始化 ──────────────────────────────────────────────
@@ -841,11 +841,29 @@ def api_library_search():
             linked = [{"title": a.title, "unit": a.unit, "keywords": json.loads(a.keywords) if a.keywords else []} for a in linked_arts]
         monya_results.append(_monya_rewards_to_dict(r, linked))
 
+    # ── 大V推薦書單搜尋 ───────────────────────────────────────────
+    book_results = []
+    total_books = 0
+    if q and not is_issue_search:
+        like = f"%{q}%"
+        bq = RecommendedBook.query.filter(
+            RecommendedBook.is_active == True,
+            db.or_(
+                RecommendedBook.book_name.ilike(like),
+                RecommendedBook.topics.ilike(like),
+                RecommendedBook.description.ilike(like),
+            )
+        ).order_by(RecommendedBook.id.desc())
+        total_books = bq.count()
+        book_results = [b.to_dict() for b in bq.limit(10).all()]
+
     return jsonify({
         "kangxuan": kangxuan_results,
         "monya": monya_results,
+        "books": book_results,
         "total_kangxuan": total_k,
         "total_monya": total_m,
+        "total_books": total_books,
         "page": page,
     })
 

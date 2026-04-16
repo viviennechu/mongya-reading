@@ -153,6 +153,33 @@ class LibraryArticle(db.Model):
         }
 
 
+class RecommendedBook(db.Model):
+    """大V推薦書單 — 從網站文章萃取，附主題關鍵字與心得連結。"""
+    __tablename__ = "recommended_books"
+
+    id = db.Column(db.Integer, primary_key=True)
+    book_name = db.Column(db.String(256), nullable=False)    # 書名
+    publisher = db.Column(db.String(64), default="")         # 出版社/品牌
+    topics = db.Column(db.Text, default="[]")                # JSON 陣列，主題關鍵字
+    description = db.Column(db.Text, default="")             # 大V推薦摘要
+    article_url = db.Column(db.Text, default="")             # 大V心得文連結
+    article_title = db.Column(db.String(512), default="")    # 心得文標題
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=tw_now)
+
+    def to_dict(self):
+        import json as _json
+        return {
+            "id": self.id,
+            "book_name": self.book_name,
+            "publisher": self.publisher or "",
+            "topics": _json.loads(self.topics) if self.topics else [],
+            "description": self.description or "",
+            "article_url": self.article_url or "",
+            "article_title": self.article_title or "",
+        }
+
+
 class Redemption(db.Model):
     """兌換紀錄。"""
     __tablename__ = "redemptions"

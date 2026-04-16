@@ -18,6 +18,12 @@
         font-size:.78rem; cursor:pointer; border:1px solid var(--border); }
   .kw:hover { background:var(--primary); color:#fff; }
 
+  /* 大V書單 */
+  .book-card { padding:14px 16px; margin-bottom:8px; border-left:3px solid #6a8f6a; }
+  .book-tag { display:inline-block; background:#e8f5e9; color:#2e7d32;
+              font-size:.72rem; padding:2px 8px; border-radius:10px; margin:2px 2px 0 0; }
+  .book-link { font-size:.8rem; color:var(--primary); }
+
   /* 蒙芽教材 */
   .monya-card { padding:14px 16px; margin-bottom:8px; border-left:3px solid #a07848; }
   .monya-pts { display:inline-block; background:#fff3e0; color:#e65100;
@@ -155,6 +161,14 @@ function render(data, reset) {
     data.monya.forEach(m => mSec.appendChild(buildMonyaCard(m)));
     el.appendChild(mSec);
   }
+
+  const hasB = data.books && data.books.length > 0;
+  if (reset && hasB) {
+    const bSec = document.createElement('div');
+    bSec.innerHTML = `<div class="section-title" style="margin-top:24px;">📗 大V推薦書單 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_books} 筆</span></div>`;
+    data.books.forEach(b => bSec.appendChild(buildBookCard(b)));
+    el.appendChild(bSec);
+  }
 }
 
 function buildArticleCard(a) {
@@ -221,6 +235,24 @@ function buildMonyaCard(m) {
       <a href="/member" style="color:var(--primary);">我的點數</a>
     </div>
     ${linkedHtml}`;
+  return card;
+}
+
+function buildBookCard(b) {
+  const tagsHtml = (b.topics||[]).map(t =>
+    `<span class="book-tag" onclick="clickKw('${esc(t)}')">${esc(t)}</span>`
+  ).join('');
+
+  const card = document.createElement('div');
+  card.className = 'card book-card';
+  card.innerHTML = `
+    <div class="article-header">
+      <span class="article-title">${highlight(b.book_name, currentQ)}</span>
+      ${b.publisher ? `<span class="article-meta">${esc(b.publisher)}</span>` : ''}
+    </div>
+    ${tagsHtml ? `<div style="margin-top:6px;">${tagsHtml}</div>` : ''}
+    ${b.description ? `<div style="font-size:.82rem;color:var(--text);margin-top:8px;line-height:1.6;">${esc(b.description.slice(0,120))}${b.description.length>120?'…':''}</div>` : ''}
+    ${b.article_url ? `<div style="margin-top:8px;"><a class="book-link" href="${esc(b.article_url)}" target="_blank">📖 大V心得文 →</a></div>` : ''}`;
   return card;
 }
 
