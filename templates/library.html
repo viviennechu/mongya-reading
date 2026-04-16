@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}蒙芽圖書館{% endblock %}
+{% block head %}
+<style>
+  .version-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .tab { padding:6px 18px; border-radius:20px; border:1.5px solid var(--border);
+         background:var(--card); color:var(--muted); font-size:.85rem; cursor:pointer;
+         transition:all .15s; }
+  .tab:hover,.tab.active { background:var(--light); border-color:var(--primary); color:var(--primary); font-weight:600; }
+  .article-card { padding:14px 16px; }
+  .article-header { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+  .article-title { font-size:.98rem; font-weight:700; }
+  .article-meta { font-size:.8rem; color:var(--muted); }
+  .kw-list { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .kw { padding:3px 10px; border-radius:12px; background:var(--light); color:var(--primary);
+        font-size:.78rem; cursor:pointer; border:1px solid var(--border); }
+  .kw:hover { background:var(--primary); color:#fff; }
+  .no-result { text-align:center; padding:40px 0; color:var(--muted); }
+  .hint { font-size:.82rem; color:var(--muted); margin-top:6px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page">
+  <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:4px;">📚 蒙芽圖書館</h2>
+  <p class="muted" style="margin-bottom:16px;">輸入關鍵字，找對應的康軒刊物單元</p>
+
+  <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <input id="q" type="text" placeholder="例如：蜜蜂、光合作用、同理心…" style="flex:1;"
+           oninput="debounceSearch()" onkeydown="if(event.key==='Enter')doSearch()">
+    <button class="btn btn-primary" onclick="doSearch()">搜尋</button>
+  </div>
+  <p class="hint">點關鍵字標籤可直接搜尋 ↓</p>
+
+  <div class="version-tabs" style="margin-top:12px;">
+    <button class="tab active" data-v="" onclick="setVersion(this,'')">全部</button>
+    <button class="tab" data-v="學前版" onclick="setVersion(this,'學前版')">學前版</button>
+    <button class="tab" data-v="初階版" onclick="setVersion(this,'初階版')">初階版</button>
+    <button class="tab" data-v="進階版" onclick="setVersion(this,'進階版')">進階版</button>
+  </div>
+
+  <div id="count-bar" class="muted" style="margin-bottom:10px;font-size:.85rem;"></div>
+  <div id="results"></div>
+  <div id="load-more" style="text-align:center;margin-top:16px;display:none;">
+    <button class="btn btn-outline" onclick="loadMore()">載入更多</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let currentQ = '', currentVersion = '', currentPage = 1, currentTotal = 0;
+let debounceTimer = null;
+
+function debounceSearch() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(doSearch, 350);
+}
+
+function setVersion(el, v) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  currentVersion = v;
+  doSearch();
+}
+
+function doSearch() {
+  currentQ = document.getElementById('q').value.trim();
+  currentPage = 1;
+  fetchArticles(true);
+}
+
+function loadMore() {
+  currentPage++;
+  fetchArticles(false);
+}
+
+function fetchArticles(reset) {
+  const params = new URLSearchParams({ page: currentPage });
+  if (currentQ) params.set('q', currentQ);
+  if (currentVersion) params.set('version', currentVersion);
+
+  fetch('/api/library/search?' + params)
+    .then(r => r.json())
+    .then(data => {
+      currentTotal = data.total;
+      const bar = document.getElementById('count-bar');
+      if (currentQ || currentVersion) {
+        bar.textContent = `共找到 ${data.total} 筆`;
+      } else {
+        bar.textContent = `館藏共 ${data.total} 筆`;
+      }
+      renderResults(data.results, reset);
+      document.getElementById('load-more').style.display =
+        (currentPage * 30 < data.total) ? 'block' : 'none';
+    });
+}
+
+function renderResults(articles, reset) {
+  const el = document.getElementById('results');
+  if (reset) el.innerHTML = '';
+
+  if (reset && articles.length === 0) {
+    el.innerHTML = '<div class="no-result">找不到相關刊物，試試其他關鍵字</div>';
+    return;
+  }
+
+  const vColor = { '學前版': '#e8f5e9', '初階版': '#e3f2fd', '進階版': '#fce4ec' };
+  const vText  = { '學前版': '#2e7d32', '初階版': '#1565c0', '進階版': '#880e4f' };
+
+  articles.forEach(a => {
+    const bg  = vColor[a.version] || '#f5f0eb';
+    const tc  = vText[a.version]  || '#7a5830';
+    const kwHtml = a.keywords.map(k =>
+      `<span class="kw" onclick="clickKw(this,'${esc(k)}')">${esc(k)}</span>`
+    ).join('');
+
+    const card = document.createElement('div');
+    card.className = 'card article-card';
+    card.innerHTML = `
+      <div class="article-header">
+        <span style="background:${bg};color:${tc};font-size:.75rem;font-weight:700;
+          padding:2px 10px;border-radius:12px;">${esc(a.version)} 第${a.issue}期</span>
+        <span class="article-title">${highlight(a.title, currentQ)}</span>
+        ${a.unit ? `<span class="article-meta">${esc(a.unit)}</span>` : ''}
+      </div>
+      <div class="kw-list">${kwHtml}</div>
+    `;
+    el.appendChild(card);
+  });
+}
+
+function clickKw(el, kw) {
+  document.getElementById('q').value = kw;
+  currentQ = kw;
+  currentPage = 1;
+  fetchArticles(true);
+}
+
+// 初始載入（顯示全部）
+fetchArticles(true);
+</script>
+{% endblock %}

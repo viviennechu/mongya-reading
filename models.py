@@ -125,6 +125,34 @@ class Reward(db.Model):
         }
 
 
+class LibraryArticle(db.Model):
+    """蒙芽圖書館 — 康軒刊物文章關鍵字索引。"""
+    __tablename__ = "library_articles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    version = db.Column(db.String(16), nullable=False)   # 學前版 / 初階版 / 進階版
+    issue = db.Column(db.Integer, nullable=False)         # 期數
+    unit = db.Column(db.String(64), default="")          # 單元名稱
+    title = db.Column(db.String(256), nullable=False)     # 文章標題
+    keywords = db.Column(db.Text, default="[]")           # JSON 陣列
+    updated_at = db.Column(db.DateTime(timezone=True), default=tw_now, onupdate=tw_now)
+
+    __table_args__ = (
+        db.UniqueConstraint("version", "issue", "title", name="uq_library_version_issue_title"),
+    )
+
+    def to_dict(self):
+        import json as _json
+        return {
+            "id": self.id,
+            "version": self.version,
+            "issue": self.issue,
+            "unit": self.unit or "",
+            "title": self.title,
+            "keywords": _json.loads(self.keywords) if self.keywords else [],
+        }
+
+
 class Redemption(db.Model):
     """兌換紀錄。"""
     __tablename__ = "redemptions"

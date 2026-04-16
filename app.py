@@ -10,7 +10,7 @@ from flask import (
     session, jsonify, render_template,
 )
 
-from models import db, Member, Reading, PointTransaction, Reward, Redemption
+from models import db, Member, Reading, PointTransaction, Reward, Redemption, LibraryArticle
 from parser import parse_chat_export, compute_content_hash
 
 # ── Flask 初始化 ──────────────────────────────────────────────
@@ -693,6 +693,103 @@ def api_member_update_gmail():
 def member_logout():
     session.pop("member_number", None)
     return redirect(url_for("member_login"))
+
+
+# ── 蒙芽圖書館 ────────────────────────────────────────────────
+@app.route("/library")
+def library_page():
+    return render_template("library.html")
+
+
+@app.route("/api/library/search")
+def api_library_search():
+    q = request.args.get("q", "").strip()
+    version = request.args.get("version", "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 30
+
+    query = LibraryArticle.query
+
+    if version:
+        query = query.filter(LibraryArticle.version == version)
+
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            db.or_(
+                LibraryArticle.title.ilike(like),
+                LibraryArticle.unit.ilike(like),
+                LibraryArticle.keywords.ilike(like),
+            )
+        )
+
+    total = query.count()
+    articles = (
+        query.order_by(LibraryArticle.version, LibraryArticle.issue)
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return jsonify({
+        "total": total,
+        "page": page,
+        "results": [a.to_dict() for a in articles],
+    })
+
+
+@app.route("/api/bot/library/sync", methods=["POST"])
+def api_library_sync():
+    """本機 sync_library.py 呼叫：批次新增/更新圖書館文章（用 API Secret 驗證）。"""
+    secret = os.environ.get("BOT_API_SECRET", "")
+    if not secret:
+        return jsonify({"error": "未設定 BOT_API_SECRET"}), 500
+    auth = request.headers.get("X-Bot-Secret", "")
+    if auth != secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(force=True) or {}
+    articles = data.get("articles", [])
+    if not isinstance(articles, list):
+        return jsonify({"error": "articles 必須為陣列"}), 400
+
+    inserted = 0
+    updated = 0
+    for a in articles:
+        version = str(a.get("version", "")).strip()
+        issue = a.get("issue")
+        title = str(a.get("title", "")).strip()
+        if not version or not issue or not title:
+            continue
+        keywords = a.get("keywords", [])
+        if isinstance(keywords, list):
+            import json as _json
+            keywords_json = _json.dumps(keywords, ensure_ascii=False)
+        else:
+            keywords_json = "[]"
+
+        existing = LibraryArticle.query.filter_by(
+            version=version, issue=int(issue), title=title
+        ).first()
+        if existing:
+            existing.unit = a.get("unit", existing.unit) or ""
+            existing.keywords = keywords_json
+            updated += 1
+        else:
+            db.session.add(LibraryArticle(
+                version=version,
+                issue=int(issue),
+                unit=a.get("unit", "") or "",
+                title=title,
+                keywords=keywords_json,
+            ))
+            inserted += 1
+
+    db.session.commit()
+    return jsonify({"ok": True, "inserted": inserted, "updated": updated})
 
 
 if __name__ == "__main__":

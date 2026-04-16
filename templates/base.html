@@ -62,7 +62,8 @@
   <nav>
     <a class="nav-brand" href="/">📚 蒙芽愛讀書</a>
     <div class="nav-links">
-      <a href="/" {% if request.endpoint=='index' %}class="active"{% endif %}>搜尋</a>
+      <a href="/" {% if request.endpoint=='index' %}class="active"{% endif %}>共讀回憶</a>
+      <a href="/library" {% if request.endpoint=='library_page' %}class="active"{% endif %}>蒙芽圖書館</a>
       <a href="/member" {% if request.endpoint=='member_page' %}class="active"{% endif %}>我的點數</a>
       {% if session.get('admin_authenticated') %}
       <a href="/admin" {% if request.endpoint and 'admin' in request.endpoint %}class="active"{% endif %}>後台</a>
