@@ -766,8 +766,10 @@ def api_library_search():
         page = 1
     per_page = 30
 
-    if not q and not version_filter:
-        return jsonify({"kangxuan": [], "monya": [], "total_kangxuan": 0, "total_monya": 0})
+    cat_filter = request.args.get("cat", "").strip()  # "monya" | "books" | ""
+
+    if not q and not version_filter and not cat_filter:
+        return jsonify({"kangxuan": [], "monya": [], "books": [], "total_kangxuan": 0, "total_monya": 0, "total_books": 0})
 
     # 解析期數輸入
     q_version, q_issue = _parse_query_issue(q)
@@ -827,6 +829,9 @@ def api_library_search():
             Reward.name.ilike(like),
             Reward.description.ilike(like),
         ))
+    elif cat_filter != 'monya' and not version_filter:
+        # 非蒙芽教材 tab 且沒有搜尋詞時不顯示蒙芽教材
+        monya_q = monya_q.filter(False)
 
     total_m = monya_q.count()
     monya_rewards = monya_q.order_by(Reward.name).limit(per_page).all()
@@ -844,16 +849,16 @@ def api_library_search():
     # ── 大V推薦書單搜尋 ───────────────────────────────────────────
     book_results = []
     total_books = 0
-    if q and not is_issue_search:
-        like = f"%{q}%"
-        bq = RecommendedBook.query.filter(
-            RecommendedBook.is_active == True,
-            db.or_(
+    if (q or cat_filter == 'books') and not is_issue_search:
+        bq = RecommendedBook.query.filter(RecommendedBook.is_active == True)
+        if q:
+            like = f"%{q}%"
+            bq = bq.filter(db.or_(
                 RecommendedBook.book_name.ilike(like),
                 RecommendedBook.topics.ilike(like),
                 RecommendedBook.description.ilike(like),
-            )
-        ).order_by(RecommendedBook.id.desc())
+            ))
+        bq = bq.order_by(RecommendedBook.id.desc())
         total_books = bq.count()
         book_results = [b.to_dict() for b in bq.limit(10).all()]
 

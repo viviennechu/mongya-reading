@@ -55,10 +55,12 @@
   <p class="hint">點關鍵字標籤可直接搜尋 · 輸入期數如「497」可找到所有相關內容</p>
 
   <div class="version-tabs" style="margin-top:12px;">
-    <button class="tab active" data-v="" onclick="setVersion(this,'')">全部</button>
-    <button class="tab" data-v="學前版" onclick="setVersion(this,'學前版')">學前版</button>
-    <button class="tab" data-v="初階版" onclick="setVersion(this,'初階版')">初階版</button>
-    <button class="tab" data-v="進階版" onclick="setVersion(this,'進階版')">進階版</button>
+    <button class="tab active" data-v="" data-cat="" onclick="setFilter(this,'','')">全部</button>
+    <button class="tab" data-v="學前版" data-cat="" onclick="setFilter(this,'學前版','')">學前版</button>
+    <button class="tab" data-v="初階版" data-cat="" onclick="setFilter(this,'初階版','')">初階版</button>
+    <button class="tab" data-v="進階版" data-cat="" onclick="setFilter(this,'進階版','')">進階版</button>
+    <button class="tab" data-v="" data-cat="monya" onclick="setFilter(this,'','monya')" style="border-color:#a07848;color:#a07848;">🌿 蒙芽教材</button>
+    <button class="tab" data-v="" data-cat="books" onclick="setFilter(this,'','books')" style="border-color:#6a8f6a;color:#6a8f6a;">📗 大V書單</button>
   </div>
 
   <div id="main-content">
@@ -76,7 +78,7 @@
 {% endblock %}
 {% block scripts %}
 <script>
-let currentQ = '', currentVersion = '', currentPage = 1;
+let currentQ = '', currentVersion = '', currentCat = '', currentPage = 1;
 let debounceTimer = null;
 
 function debounceSearch() {
@@ -84,17 +86,19 @@ function debounceSearch() {
   debounceTimer = setTimeout(doSearch, 350);
 }
 
-function setVersion(el, v) {
+function setFilter(el, v, cat) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   currentVersion = v;
-  if (currentQ || currentVersion) doSearch();
+  currentCat = cat;
+  if (currentQ || currentVersion || currentCat) doSearch();
+  else showEmpty();
 }
 
 function doSearch() {
   currentQ = document.getElementById('q').value.trim();
   currentPage = 1;
-  if (!currentQ && !currentVersion) {
+  if (!currentQ && !currentVersion && !currentCat) {
     showEmpty();
     return;
   }
@@ -119,6 +123,7 @@ function fetchResults(reset) {
   const params = new URLSearchParams({ page: currentPage });
   if (currentQ) params.set('q', currentQ);
   if (currentVersion) params.set('version', currentVersion);
+  if (currentCat) params.set('cat', currentCat);
 
   fetch('/api/library/search?' + params)
     .then(r => r.json())
@@ -127,45 +132,49 @@ function fetchResults(reset) {
 
 function render(data, reset) {
   const el = document.getElementById('main-content');
-  const hasK = data.kangxuan && data.kangxuan.length > 0;
-  const hasM = data.monya && data.monya.length > 0;
+  const showK = currentCat === '' || currentCat === undefined;
+  const showM = currentCat === '' || currentCat === 'monya';
+  const showB = currentCat === '' || currentCat === 'books';
+
+  const hasK = showK && data.kangxuan && data.kangxuan.length > 0;
+  const hasM = showM && data.monya && data.monya.length > 0;
+  const hasB = showB && data.books && data.books.length > 0;
 
   if (reset) el.innerHTML = '';
 
-  if (!hasK && !hasM && reset) {
+  if (!hasK && !hasM && !hasB && reset) {
     el.innerHTML = `<div class="no-result">找不到相關內容，試試其他關鍵字</div>`;
     document.getElementById('load-more-k').style.display = 'none';
     return;
   }
 
-  if (reset && (hasK || data.total_kangxuan > 0)) {
-    const sec = document.createElement('div');
-    sec.id = 'kangxuan-section';
-    sec.innerHTML = `<div class="section-title">📖 康軒刊物 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_kangxuan} 筆</span></div>`;
-    el.appendChild(sec);
+  if (showK) {
+    if (reset && (hasK || data.total_kangxuan > 0)) {
+      const sec = document.createElement('div');
+      sec.id = 'kangxuan-section';
+      sec.innerHTML = `<div class="section-title">📖 康軒刊物 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_kangxuan} 筆</span></div>`;
+      el.appendChild(sec);
+    }
+    if (hasK) {
+      let sec = document.getElementById('kangxuan-section') || el;
+      data.kangxuan.forEach(a => sec.appendChild(buildArticleCard(a)));
+    }
+    document.getElementById('load-more-k').style.display =
+      (currentPage * 30 < data.total_kangxuan) ? 'block' : 'none';
+  } else {
+    document.getElementById('load-more-k').style.display = 'none';
   }
 
-  if (hasK) {
-    let sec = document.getElementById('kangxuan-section') || el;
-    data.kangxuan.forEach(a => {
-      sec.appendChild(buildArticleCard(a));
-    });
-  }
-
-  document.getElementById('load-more-k').style.display =
-    (currentPage * 30 < data.total_kangxuan) ? 'block' : 'none';
-
-  if (reset && hasM) {
+  if (showM && reset && hasM) {
     const mSec = document.createElement('div');
-    mSec.innerHTML = `<div class="section-title" style="margin-top:24px;">🌿 蒙芽自製教材 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_monya} 筆</span></div>`;
+    mSec.innerHTML = `<div class="section-title" style="margin-top:${showK?'24':'0'}px;">🌿 蒙芽自製教材 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_monya} 筆</span></div>`;
     data.monya.forEach(m => mSec.appendChild(buildMonyaCard(m)));
     el.appendChild(mSec);
   }
 
-  const hasB = data.books && data.books.length > 0;
-  if (reset && hasB) {
+  if (showB && reset && hasB) {
     const bSec = document.createElement('div');
-    bSec.innerHTML = `<div class="section-title" style="margin-top:24px;">📗 大V推薦書單 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_books} 筆</span></div>`;
+    bSec.innerHTML = `<div class="section-title" style="margin-top:${(showK||showM)?'24':'0'}px;">📗 大V推薦書單 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_books} 筆</span></div>`;
     data.books.forEach(b => bSec.appendChild(buildBookCard(b)));
     el.appendChild(bSec);
   }
