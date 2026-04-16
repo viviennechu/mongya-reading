@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}蒙芽共讀資料庫{% endblock %}</title>
+  <title>{% block title %}蒙芽愛讀書{% endblock %}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -60,7 +60,7 @@
 </head>
 <body>
   <nav>
-    <a class="nav-brand" href="/">📚 蒙芽共讀</a>
+    <a class="nav-brand" href="/">📚 蒙芽愛讀書</a>
     <div class="nav-links">
       <a href="/" {% if request.endpoint=='index' %}class="active"{% endif %}>搜尋</a>
       <a href="/member" {% if request.endpoint=='member_page' %}class="active"{% endif %}>我的點數</a>
