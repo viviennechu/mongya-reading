@@ -29,12 +29,20 @@
 
   <div class="card" style="margin-bottom:20px;">
     <div style="font-size:.9rem;font-weight:600;margin-bottom:8px;">📧 我的 Gmail（用來接收雲端教材）</div>
+    {% if member.gmail %}
     <div style="display:flex;gap:8px;align-items:center;">
-      <input id="gmail-input" type="email" value="{{ member.gmail or '' }}" placeholder="your@gmail.com"
+      <input type="email" value="{{ member.gmail }}" readonly
+        style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);font-size:.95rem;background:#f5f5f5;color:var(--muted);cursor:not-allowed;" />
+    </div>
+    <div style="font-size:.8rem;margin-top:6px;color:var(--muted);">如需更改請聯絡老師協助 😊</div>
+    {% else %}
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="gmail-input" type="email" value="" placeholder="your@gmail.com"
         style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);font-size:.95rem;" />
       <button class="btn btn-primary btn-sm" onclick="saveGmail()">儲存</button>
     </div>
     <div id="gmail-msg" style="font-size:.82rem;margin-top:6px;color:var(--muted);"></div>
+    {% endif %}
   </div>
 
   <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">

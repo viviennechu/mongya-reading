@@ -593,6 +593,22 @@ def api_admin_sync_members():
     return jsonify({"ok": True, "created": created, "updated": updated, "skipped": skipped})
 
 
+@app.route("/api/admin/member/<int:member_number>/gmail", methods=["POST"])
+@admin_required
+def api_admin_update_gmail(member_number: int):
+    """後台修改指定成員的 Gmail。"""
+    data = request.get_json(force=True) or {}
+    gmail = data.get("gmail", "").strip()
+    if gmail and "@" not in gmail:
+        return jsonify({"error": "Gmail 格式不正確"}), 400
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+    member.gmail = gmail or None
+    db.session.commit()
+    return jsonify({"ok": True, "gmail": member.gmail or ""})
+
+
 @app.route("/api/admin/redemptions/<int:redemption_id>/fulfill", methods=["POST"])
 @admin_required
 def api_admin_fulfill(redemption_id: int):

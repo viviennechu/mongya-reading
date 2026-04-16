@@ -83,6 +83,20 @@
     </div>
     <div id="members-list"></div>
 
+    <!-- Gmail modal -->
+    <div id="gmail-modal" class="overlay">
+      <div class="card" style="width:100%;max-width:360px;margin:0;">
+        <h3 style="margin-bottom:16px;" id="gmail-modal-title">修改 Gmail</h3>
+        <input type="hidden" id="gmail-modal-mno" />
+        <div class="form-group"><label>Gmail</label><input type="email" id="gmail-modal-input" placeholder="your@gmail.com" /></div>
+        <div class="form-group"><div class="muted" style="font-size:.8rem;">清空後儲存可讓成員重新填寫</div></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-outline btn-sm" onclick="closeGmailModal()">取消</button>
+          <button class="btn btn-primary btn-sm" onclick="submitGmail()">儲存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 補點 modal -->
     <div id="point-modal" class="overlay">
       <div class="card" style="width:100%;max-width:360px;margin:0;">
@@ -201,12 +215,29 @@
     const el=document.getElementById("members-list");
     if(!filtered.length){ el.innerHTML=`<div class="muted" style="padding:20px;text-align:center;">沒有成員</div>`; return; }
     el.innerHTML=`<div class="card">${filtered.map(m=>`
-      <div class="row">
+      <div class="row" style="flex-wrap:wrap;gap:4px;align-items:center;">
         <span style="font-size:.85rem;color:var(--muted);min-width:36px;">M${m.member_number}</span>
-        <span style="flex:1;font-size:.95rem;">${esc(m.display_name||"—")}</span>
+        <span style="flex:1;font-size:.95rem;min-width:80px;">${esc(m.display_name||"—")}</span>
         <span style="font-weight:800;color:var(--primary);min-width:40px;text-align:right;">${m.points}</span>
-        <button class="btn btn-outline btn-sm" onclick="openPointModal(${m.member_number},'${esc(m.display_name||"")}')">調整</button>
+        <button class="btn btn-outline btn-sm" onclick="openPointModal(${m.member_number},'${esc(m.display_name||"")}')">點數</button>
+        <button class="btn btn-outline btn-sm" onclick="openGmailModal(${m.member_number},'${esc(m.display_name||"")}','${esc(m.gmail||"")}')">Gmail</button>
+        <div style="flex-basis:100%;font-size:.78rem;color:var(--muted);padding-left:4px;">${m.gmail?'📧 '+esc(m.gmail):'<span style="opacity:.5;">未設 Gmail</span>'}</div>
       </div>`).join("")}</div>`;
+  }
+  function openGmailModal(mno,name,gmail){
+    document.getElementById("gmail-modal-mno").value=mno;
+    document.getElementById("gmail-modal-title").textContent=`修改 M${mno}「${name}」的 Gmail`;
+    document.getElementById("gmail-modal-input").value=gmail;
+    document.getElementById("gmail-modal").classList.add("open");
+  }
+  function closeGmailModal(){ document.getElementById("gmail-modal").classList.remove("open"); }
+  async function submitGmail(){
+    const mno=parseInt(document.getElementById("gmail-modal-mno").value);
+    const gmail=document.getElementById("gmail-modal-input").value.trim();
+    const res=await fetch(`/api/admin/member/${mno}/gmail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gmail})});
+    const data=await res.json();
+    if(data.ok){ closeGmailModal(); toast("Gmail 已更新！"); loadMembers(); }
+    else toast("⚠️ "+data.error);
   }
   function openPointModal(mno,name){
     document.getElementById("modal-mno").value=mno;
