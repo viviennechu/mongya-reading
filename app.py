@@ -717,43 +717,136 @@ def library_page():
     return render_template("library.html")
 
 
+def _parse_reward_issue(name: str):
+    """從獎品名稱解析版本和期數，例：康軒初階版 497期 主題延伸 → (初階版, 497)"""
+    import re as _re
+    m = _re.search(r"(學前版|初階版|進階版)\s*(\d+)期?", name)
+    if m:
+        return m.group(1), int(m.group(2))
+    return None, None
+
+
+def _parse_query_issue(q: str):
+    """
+    解析搜尋詞中的版本/期數。
+    '497' → (None, 497)
+    '初階版497' or '初階版 497' → ('初階版', 497)
+    其他 → (None, None)
+    """
+    import re as _re
+    if q.isdigit():
+        return None, int(q)
+    m = _re.match(r"^(學前版|初階版|進階版)\s*(\d+)$", q)
+    if m:
+        return m.group(1), int(m.group(2))
+    return None, None
+
+
+def _monya_rewards_to_dict(reward, linked_articles=None):
+    version, issue = _parse_reward_issue(reward.name)
+    return {
+        "id": reward.id,
+        "name": reward.name,
+        "description": reward.description or "",
+        "points_required": reward.points_required,
+        "version": version or "",
+        "issue": issue,
+        "linked_articles": linked_articles or [],
+    }
+
+
 @app.route("/api/library/search")
 def api_library_search():
+    import re as _re
     q = request.args.get("q", "").strip()
-    version = request.args.get("version", "").strip()
+    version_filter = request.args.get("version", "").strip()
     try:
         page = max(1, int(request.args.get("page", 1)))
     except ValueError:
         page = 1
     per_page = 30
 
-    query = LibraryArticle.query
+    if not q and not version_filter:
+        return jsonify({"kangxuan": [], "monya": [], "total_kangxuan": 0, "total_monya": 0})
 
-    if version:
-        query = query.filter(LibraryArticle.version == version)
+    # 解析期數輸入
+    q_version, q_issue = _parse_query_issue(q)
+    is_issue_search = q_issue is not None
 
-    if q:
+    # ── 康軒搜尋 ──────────────────────────────────────────────────
+    kq = LibraryArticle.query
+    if version_filter:
+        kq = kq.filter(LibraryArticle.version == version_filter)
+    elif q_version:
+        kq = kq.filter(LibraryArticle.version == q_version)
+
+    if is_issue_search:
+        kq = kq.filter(LibraryArticle.issue == q_issue)
+    elif q:
         like = f"%{q}%"
-        query = query.filter(
-            db.or_(
-                LibraryArticle.title.ilike(like),
-                LibraryArticle.unit.ilike(like),
-                LibraryArticle.keywords.ilike(like),
-            )
-        )
+        kq = kq.filter(db.or_(
+            LibraryArticle.title.ilike(like),
+            LibraryArticle.unit.ilike(like),
+            LibraryArticle.keywords.ilike(like),
+        ))
 
-    total = query.count()
+    total_k = kq.count()
     articles = (
-        query.order_by(LibraryArticle.version, LibraryArticle.issue)
+        kq.order_by(LibraryArticle.version, LibraryArticle.issue)
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()
     )
 
+    # 為每篇康軒文章附帶同期蒙芽教材
+    def find_monya_for_issue(version, issue):
+        candidates = Reward.query.filter(
+            Reward.is_active == True,
+            Reward.name.ilike(f"%{version}%{issue}期%"),
+        ).all()
+        return [{"id": r.id, "name": r.name, "description": r.description or "", "points_required": r.points_required} for r in candidates]
+
+    kangxuan_results = []
+    for a in articles:
+        d = a.to_dict()
+        d["monya_materials"] = find_monya_for_issue(a.version, a.issue)
+        kangxuan_results.append(d)
+
+    # ── 蒙芽教材搜尋 ──────────────────────────────────────────────
+    monya_q = Reward.query.filter(Reward.is_active == True)
+    if version_filter:
+        monya_q = monya_q.filter(Reward.name.ilike(f"%{version_filter}%"))
+    elif q_version:
+        monya_q = monya_q.filter(Reward.name.ilike(f"%{q_version}%"))
+
+    if is_issue_search:
+        monya_q = monya_q.filter(Reward.name.ilike(f"%{q_issue}期%"))
+    elif q:
+        like = f"%{q}%"
+        monya_q = monya_q.filter(db.or_(
+            Reward.name.ilike(like),
+            Reward.description.ilike(like),
+        ))
+
+    total_m = monya_q.count()
+    monya_rewards = monya_q.order_by(Reward.name).limit(per_page).all()
+
+    # 為每個蒙芽教材附帶同期康軒文章
+    monya_results = []
+    for r in monya_rewards:
+        rv, ri = _parse_reward_issue(r.name)
+        linked = []
+        if rv and ri:
+            linked_arts = LibraryArticle.query.filter_by(version=rv, issue=ri).all()
+            linked = [{"title": a.title, "unit": a.unit, "keywords": json.loads(a.keywords) if a.keywords else []} for a in linked_arts]
+        monya_results.append(_monya_rewards_to_dict(r, linked))
+
     return jsonify({
-        "total": total,
+        "kangxuan": kangxuan_results,
+        "monya": monya_results,
+        "total_kangxuan": total_k,
+        "total_monya": total_m,
         "page": page,
-        "results": [a.to_dict() for a in articles],
     })
 
 

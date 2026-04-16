@@ -4,32 +4,49 @@
 <style>
   .version-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
   .tab { padding:6px 18px; border-radius:20px; border:1.5px solid var(--border);
-         background:var(--card); color:var(--muted); font-size:.85rem; cursor:pointer;
-         transition:all .15s; }
+         background:var(--card); color:var(--muted); font-size:.85rem; cursor:pointer; transition:all .15s; }
   .tab:hover,.tab.active { background:var(--light); border-color:var(--primary); color:var(--primary); font-weight:600; }
-  .article-card { padding:14px 16px; }
+
+  .section-title { font-size:.9rem; font-weight:700; color:var(--muted); margin:20px 0 8px;
+                   display:flex; align-items:center; gap:6px; }
+  .article-card { padding:14px 16px; margin-bottom:8px; }
   .article-header { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
-  .article-title { font-size:.98rem; font-weight:700; }
+  .article-title { font-size:.95rem; font-weight:700; }
   .article-meta { font-size:.8rem; color:var(--muted); }
   .kw-list { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
   .kw { padding:3px 10px; border-radius:12px; background:var(--light); color:var(--primary);
         font-size:.78rem; cursor:pointer; border:1px solid var(--border); }
   .kw:hover { background:var(--primary); color:#fff; }
+
+  /* 蒙芽教材 */
+  .monya-card { padding:14px 16px; margin-bottom:8px; border-left:3px solid #a07848; }
+  .monya-pts { display:inline-block; background:#fff3e0; color:#e65100;
+               font-size:.75rem; font-weight:700; padding:2px 10px;
+               border-radius:12px; margin-left:6px; }
+  .linked-box { margin-top:10px; padding:10px 12px; background:#faf8f5;
+                border-radius:10px; font-size:.82rem; }
+  .linked-title { font-weight:700; color:var(--muted); margin-bottom:6px; font-size:.8rem; }
+  .linked-item { padding:4px 0; color:var(--text); border-bottom:1px solid var(--light); }
+  .linked-item:last-child { border-bottom:none; }
+
   .no-result { text-align:center; padding:40px 0; color:var(--muted); }
   .hint { font-size:.82rem; color:var(--muted); margin-top:6px; }
+  .empty-state { text-align:center; padding:60px 20px; }
+  .empty-state .icon { font-size:3rem; margin-bottom:12px; }
+  .empty-state p { color:var(--muted); line-height:1.8; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="page">
   <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:4px;">📚 蒙芽圖書館</h2>
-  <p class="muted" style="margin-bottom:16px;">輸入關鍵字，找對應的康軒刊物單元</p>
+  <p class="muted" style="margin-bottom:16px;">輸入關鍵字或期數，找康軒刊物與蒙芽教材</p>
 
-  <div style="display:flex;gap:8px;margin-bottom:12px;">
-    <input id="q" type="text" placeholder="例如：蜜蜂、光合作用、同理心…" style="flex:1;"
+  <div style="display:flex;gap:8px;margin-bottom:8px;">
+    <input id="q" type="text" placeholder="例：蜜蜂、交通、497、初階版497…" style="flex:1;"
            oninput="debounceSearch()" onkeydown="if(event.key==='Enter')doSearch()">
     <button class="btn btn-primary" onclick="doSearch()">搜尋</button>
   </div>
-  <p class="hint">點關鍵字標籤可直接搜尋 ↓</p>
+  <p class="hint">點關鍵字標籤可直接搜尋 · 輸入期數如「497」可找到所有相關內容</p>
 
   <div class="version-tabs" style="margin-top:12px;">
     <button class="tab active" data-v="" onclick="setVersion(this,'')">全部</button>
@@ -38,16 +55,22 @@
     <button class="tab" data-v="進階版" onclick="setVersion(this,'進階版')">進階版</button>
   </div>
 
-  <div id="count-bar" class="muted" style="margin-bottom:10px;font-size:.85rem;"></div>
-  <div id="results"></div>
-  <div id="load-more" style="text-align:center;margin-top:16px;display:none;">
-    <button class="btn btn-outline" onclick="loadMore()">載入更多</button>
+  <div id="main-content">
+    <!-- 初始空狀態 -->
+    <div class="empty-state">
+      <div class="icon">🔍</div>
+      <p>輸入關鍵字開始搜尋<br>康軒刊物主題、蒙芽自製教材<br>都能一起找到</p>
+    </div>
+  </div>
+
+  <div id="load-more-k" style="text-align:center;margin-top:8px;display:none;">
+    <button class="btn btn-outline" onclick="loadMoreK()">康軒刊物載入更多</button>
   </div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
-let currentQ = '', currentVersion = '', currentPage = 1, currentTotal = 0;
+let currentQ = '', currentVersion = '', currentPage = 1;
 let debounceTimer = null;
 
 function debounceSearch() {
@@ -59,83 +82,153 @@ function setVersion(el, v) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   currentVersion = v;
-  doSearch();
+  if (currentQ || currentVersion) doSearch();
 }
 
 function doSearch() {
   currentQ = document.getElementById('q').value.trim();
   currentPage = 1;
-  fetchArticles(true);
+  if (!currentQ && !currentVersion) {
+    showEmpty();
+    return;
+  }
+  fetchResults(true);
 }
 
-function loadMore() {
+function loadMoreK() {
   currentPage++;
-  fetchArticles(false);
+  fetchResults(false);
 }
 
-function fetchArticles(reset) {
+function showEmpty() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="empty-state">
+      <div class="icon">🔍</div>
+      <p>輸入關鍵字開始搜尋<br>康軒刊物主題、蒙芽自製教材<br>都能一起找到</p>
+    </div>`;
+  document.getElementById('load-more-k').style.display = 'none';
+}
+
+function fetchResults(reset) {
   const params = new URLSearchParams({ page: currentPage });
   if (currentQ) params.set('q', currentQ);
   if (currentVersion) params.set('version', currentVersion);
 
   fetch('/api/library/search?' + params)
     .then(r => r.json())
-    .then(data => {
-      currentTotal = data.total;
-      const bar = document.getElementById('count-bar');
-      if (currentQ || currentVersion) {
-        bar.textContent = `共找到 ${data.total} 筆`;
-      } else {
-        bar.textContent = `館藏共 ${data.total} 筆`;
-      }
-      renderResults(data.results, reset);
-      document.getElementById('load-more').style.display =
-        (currentPage * 30 < data.total) ? 'block' : 'none';
-    });
+    .then(data => render(data, reset));
 }
 
-function renderResults(articles, reset) {
-  const el = document.getElementById('results');
+function render(data, reset) {
+  const el = document.getElementById('main-content');
+  const hasK = data.kangxuan && data.kangxuan.length > 0;
+  const hasM = data.monya && data.monya.length > 0;
+
   if (reset) el.innerHTML = '';
 
-  if (reset && articles.length === 0) {
-    el.innerHTML = '<div class="no-result">找不到相關刊物，試試其他關鍵字</div>';
+  if (!hasK && !hasM && reset) {
+    el.innerHTML = `<div class="no-result">找不到相關內容，試試其他關鍵字</div>`;
+    document.getElementById('load-more-k').style.display = 'none';
     return;
   }
 
-  const vColor = { '學前版': '#e8f5e9', '初階版': '#e3f2fd', '進階版': '#fce4ec' };
-  const vText  = { '學前版': '#2e7d32', '初階版': '#1565c0', '進階版': '#880e4f' };
+  if (reset && (hasK || data.total_kangxuan > 0)) {
+    const sec = document.createElement('div');
+    sec.id = 'kangxuan-section';
+    sec.innerHTML = `<div class="section-title">📖 康軒刊物 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_kangxuan} 筆</span></div>`;
+    el.appendChild(sec);
+  }
 
-  articles.forEach(a => {
-    const bg  = vColor[a.version] || '#f5f0eb';
-    const tc  = vText[a.version]  || '#7a5830';
-    const kwHtml = a.keywords.map(k =>
-      `<span class="kw" onclick="clickKw(this,'${esc(k)}')">${esc(k)}</span>`
-    ).join('');
+  if (hasK) {
+    let sec = document.getElementById('kangxuan-section') || el;
+    data.kangxuan.forEach(a => {
+      sec.appendChild(buildArticleCard(a));
+    });
+  }
 
-    const card = document.createElement('div');
-    card.className = 'card article-card';
-    card.innerHTML = `
-      <div class="article-header">
-        <span style="background:${bg};color:${tc};font-size:.75rem;font-weight:700;
-          padding:2px 10px;border-radius:12px;">${esc(a.version)} 第${a.issue}期</span>
-        <span class="article-title">${highlight(a.title, currentQ)}</span>
-        ${a.unit ? `<span class="article-meta">${esc(a.unit)}</span>` : ''}
-      </div>
-      <div class="kw-list">${kwHtml}</div>
-    `;
-    el.appendChild(card);
-  });
+  document.getElementById('load-more-k').style.display =
+    (currentPage * 30 < data.total_kangxuan) ? 'block' : 'none';
+
+  if (reset && hasM) {
+    const mSec = document.createElement('div');
+    mSec.innerHTML = `<div class="section-title" style="margin-top:24px;">🌿 蒙芽自製教材 <span style="font-weight:400;font-size:.8rem;">共 ${data.total_monya} 筆</span></div>`;
+    data.monya.forEach(m => mSec.appendChild(buildMonyaCard(m)));
+    el.appendChild(mSec);
+  }
 }
 
-function clickKw(el, kw) {
+function buildArticleCard(a) {
+  const vColor = {'學前版':'#e8f5e9','初階版':'#e3f2fd','進階版':'#fce4ec'};
+  const vText  = {'學前版':'#2e7d32','初階版':'#1565c0','進階版':'#880e4f'};
+  const bg = vColor[a.version]||'#f5f0eb';
+  const tc = vText[a.version]||'#7a5830';
+
+  const kwHtml = (a.keywords||[]).map(k =>
+    `<span class="kw" onclick="clickKw('${esc(k)}')">${esc(k)}</span>`
+  ).join('');
+
+  let monyaHtml = '';
+  if (a.monya_materials && a.monya_materials.length > 0) {
+    const items = a.monya_materials.map(m => `
+      <div class="linked-item">
+        🌿 ${esc(m.description||m.name)}
+        <span class="monya-pts">${m.points_required}點兌換</span>
+        <a href="/member" style="font-size:.75rem;color:var(--primary);margin-left:6px;">查看點數 →</a>
+      </div>`).join('');
+    monyaHtml = `<div class="linked-box">
+      <div class="linked-title">📎 本期有對應的蒙芽教材</div>${items}</div>`;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'card article-card';
+  card.innerHTML = `
+    <div class="article-header">
+      <span style="background:${bg};color:${tc};font-size:.75rem;font-weight:700;padding:2px 10px;border-radius:12px;">${esc(a.version)} 第${a.issue}期</span>
+      <span class="article-title">${highlight(a.title, currentQ)}</span>
+      ${a.unit ? `<span class="article-meta">${esc(a.unit)}</span>` : ''}
+    </div>
+    <div class="kw-list">${kwHtml}</div>
+    ${monyaHtml}`;
+  return card;
+}
+
+function buildMonyaCard(m) {
+  const vColor = {'學前版':'#e8f5e9','初階版':'#e3f2fd','進階版':'#fce4ec'};
+  const vText  = {'學前版':'#2e7d32','初階版':'#1565c0','進階版':'#880e4f'};
+  const bg = vColor[m.version]||'#fff3e0';
+  const tc = vText[m.version]||'#e65100';
+
+  let linkedHtml = '';
+  if (m.linked_articles && m.linked_articles.length > 0) {
+    const items = m.linked_articles.map(a => `
+      <div class="linked-item">
+        📖 ${esc(a.title)} ${a.unit ? `<span style="color:var(--muted);font-size:.78rem;">・${esc(a.unit)}</span>` : ''}
+        ${(a.keywords||[]).slice(0,4).map(k=>`<span class="kw" style="font-size:.72rem;" onclick="clickKw('${esc(k)}')">${esc(k)}</span>`).join('')}
+      </div>`).join('');
+    linkedHtml = `<div class="linked-box">
+      <div class="linked-title">📖 同期康軒刊物文章</div>${items}</div>`;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'card monya-card';
+  card.innerHTML = `
+    <div class="article-header">
+      ${m.version ? `<span style="background:${bg};color:${tc};font-size:.75rem;font-weight:700;padding:2px 10px;border-radius:12px;">${esc(m.version)} 第${m.issue}期</span>` : ''}
+      <span class="article-title">${highlight(m.description||m.name, currentQ)}</span>
+      <span class="monya-pts">${m.points_required}點兌換</span>
+    </div>
+    <div style="font-size:.8rem;color:var(--muted);margin-top:2px;">主題延伸教材 ·
+      <a href="/member" style="color:var(--primary);">我的點數</a>
+    </div>
+    ${linkedHtml}`;
+  return card;
+}
+
+function clickKw(kw) {
   document.getElementById('q').value = kw;
   currentQ = kw;
   currentPage = 1;
-  fetchArticles(true);
+  fetchResults(true);
 }
-
-// 初始載入（顯示全部）
-fetchArticles(true);
 </script>
 {% endblock %}
