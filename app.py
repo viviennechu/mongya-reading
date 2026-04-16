@@ -472,6 +472,61 @@ def api_admin_batch_point():
     return jsonify({"ok": True, "success": len(ok), "missing": missing})
 
 
+@app.route("/api/bot/award-point", methods=["POST"])
+def api_bot_award_point():
+    """LINE Bot 呼叫：幫指定 M 編號加點（用 API Secret 驗證）。"""
+    secret = os.environ.get("BOT_API_SECRET", "")
+    if not secret:
+        return jsonify({"error": "未設定 BOT_API_SECRET"}), 500
+    auth = request.headers.get("X-Bot-Secret", "")
+    if auth != secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(force=True) or {}
+    member_number = data.get("member_number")
+    delta = data.get("delta", 1)
+    reason = data.get("reason", "LINE Bot 活動")
+
+    if member_number is None:
+        return jsonify({"error": "缺少 member_number"}), 400
+    try:
+        delta = int(delta)
+        member_number = int(member_number)
+    except (ValueError, TypeError):
+        return jsonify({"error": "參數格式錯誤"}), 400
+
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+
+    tx = PointTransaction(member_id=member.id, delta=delta, reason=reason)
+    db.session.add(tx)
+    db.session.commit()
+    return jsonify({"ok": True, "member_number": member_number, "new_points": member.points})
+
+
+@app.route("/api/bot/member-points", methods=["GET"])
+def api_bot_member_points():
+    """LINE Bot 呼叫：查詢 M 編號的點數（用 API Secret 驗證）。"""
+    secret = os.environ.get("BOT_API_SECRET", "")
+    if not secret:
+        return jsonify({"error": "未設定 BOT_API_SECRET"}), 500
+    auth = request.headers.get("X-Bot-Secret", "")
+    if auth != secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    try:
+        member_number = int(request.args.get("member_number", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "參數格式錯誤"}), 400
+
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+
+    return jsonify({"member_number": member_number, "display_name": member.display_name, "points": member.points})
+
+
 @app.route("/api/admin/all-point", methods=["POST"])
 @admin_required
 def api_admin_all_point():
