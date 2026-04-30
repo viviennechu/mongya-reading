@@ -625,10 +625,11 @@ def api_admin_monthly_participants():
 @app.route("/api/admin/monthly-draw", methods=["POST"])
 @admin_required
 def api_admin_monthly_draw():
-    """從指定月份的共讀名單中隨機抽出一位得獎者。"""
+    """從指定月份的共讀名單中隨機抽出 1–3 位得獎者（不重複）。"""
     import random
     data = request.get_json(force=True) or {}
     month = str(data.get("month", ""))
+    count = min(max(int(data.get("count", 1)), 1), 3)
     if not month:
         return jsonify({"error": "缺少 month"}), 400
 
@@ -642,10 +643,10 @@ def api_admin_monthly_draw():
     if not rows:
         return jsonify({"error": f"{month}月沒有共讀紀錄"}), 404
 
-    winner = random.choice(rows)
+    winners = random.sample(rows, min(count, len(rows)))
     return jsonify({
         "month": month,
-        "winner": {"member_number": winner.member_number, "display_name": winner.display_name or ""},
+        "winners": [{"member_number": w.member_number, "display_name": w.display_name or ""} for w in winners],
         "pool_size": len(rows),
     })
 

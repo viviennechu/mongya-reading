@@ -164,15 +164,25 @@
         <button class="btn btn-outline" onclick="loadParticipants()">載入名單</button>
       </div>
       <div id="lottery-list" style="margin-bottom:16px;"></div>
-      <button class="btn btn-primary" id="draw-btn" style="display:none;font-size:1rem;padding:12px 28px;" onclick="doDraw()">🎰 開始抽獎！</button>
+      <div id="draw-controls" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+          <label style="font-size:.9rem;color:var(--muted);">抽出幾位？</label>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-outline btn-sm winner-count-btn active-count" data-count="1" onclick="setWinnerCount(1)">1 位</button>
+            <button class="btn btn-outline btn-sm winner-count-btn" data-count="2" onclick="setWinnerCount(2)">2 位</button>
+            <button class="btn btn-outline btn-sm winner-count-btn" data-count="3" onclick="setWinnerCount(3)">3 位</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="draw-btn" style="font-size:1rem;padding:12px 28px;" onclick="doDraw()">🎰 開始抽獎！</button>
+      </div>
     </div>
-    <div id="winner-card" style="display:none;">
-      <div class="card" style="text-align:center;padding:32px;border:2px solid var(--primary);background:var(--light);">
-        <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
-        <div style="font-size:.9rem;color:var(--muted);margin-bottom:4px;">本次得獎者</div>
-        <div id="winner-name" style="font-size:1.6rem;font-weight:800;color:var(--primary);margin-bottom:4px;"></div>
-        <div id="winner-mno" style="font-size:.95rem;color:var(--muted);margin-bottom:12px;"></div>
-        <div id="winner-pool" style="font-size:.82rem;color:var(--muted);"></div>
+    <div id="winners-area" style="display:none;">
+      <div class="card" style="border:2px solid var(--primary);background:var(--light);padding:24px;">
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:2rem;">🎉</div>
+          <div id="winner-pool" style="font-size:.82rem;color:var(--muted);margin-top:4px;"></div>
+        </div>
+        <div id="winners-list"></div>
       </div>
     </div>
   </div>
@@ -381,17 +391,28 @@
   }
 
   // ── 抽獎 ──
+  let selectedWinnerCount = 1;
+  function setWinnerCount(n){
+    selectedWinnerCount = n;
+    document.querySelectorAll(".winner-count-btn").forEach(b=>{
+      b.classList.toggle("active-count", parseInt(b.dataset.count)===n);
+      b.style.background = parseInt(b.dataset.count)===n ? "var(--primary)" : "";
+      b.style.color = parseInt(b.dataset.count)===n ? "#fff" : "";
+      b.style.borderColor = parseInt(b.dataset.count)===n ? "var(--primary)" : "";
+    });
+  }
+
   async function loadParticipants(){
     const month = document.getElementById("lottery-month").value;
     if(!month){ toast("請先選擇月份"); return; }
     const res = await fetch(`/api/admin/monthly-participants?month=${month}`);
     const data = await res.json();
     const el = document.getElementById("lottery-list");
-    document.getElementById("winner-card").style.display = "none";
-    if(data.error){ el.innerHTML=`<span style="color:var(--red)">${esc(data.error)}</span>`; document.getElementById("draw-btn").style.display="none"; return; }
+    document.getElementById("winners-area").style.display = "none";
+    if(data.error){ el.innerHTML=`<span style="color:var(--red)">${esc(data.error)}</span>`; document.getElementById("draw-controls").style.display="none"; return; }
     if(!data.participants.length){
       el.innerHTML=`<div class="muted" style="padding:12px;">${month}月沒有共讀紀錄</div>`;
-      document.getElementById("draw-btn").style.display="none";
+      document.getElementById("draw-controls").style.display="none";
       return;
     }
     el.innerHTML=`
@@ -402,7 +423,8 @@
           <span>${esc(p.display_name||"—")}</span>
         </div>`).join("")}
       </div>`;
-    document.getElementById("draw-btn").style.display="";
+    document.getElementById("draw-controls").style.display="";
+    setWinnerCount(selectedWinnerCount);
   }
 
   async function doDraw(){
@@ -410,16 +432,28 @@
     if(!month){ toast("請先選擇月份"); return; }
     const btn = document.getElementById("draw-btn");
     btn.disabled=true; btn.textContent="抽獎中…";
-    const res = await fetch("/api/admin/monthly-draw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month})});
+    const res = await fetch("/api/admin/monthly-draw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month, count: selectedWinnerCount})});
     const data = await res.json();
     btn.disabled=false; btn.textContent="🎰 開始抽獎！";
     if(data.error){ toast("⚠️ "+data.error); return; }
-    const w = data.winner;
-    document.getElementById("winner-name").textContent = w.display_name || "—";
-    document.getElementById("winner-mno").textContent = `M${w.member_number}`;
-    document.getElementById("winner-pool").textContent = `從 ${data.pool_size} 位參與者中抽出`;
-    document.getElementById("winner-card").style.display="";
-    document.getElementById("winner-card").scrollIntoView({behavior:"smooth"});
+    document.getElementById("winner-pool").textContent = `從 ${data.pool_size} 位參與者中抽出 ${data.winners.length} 位`;
+    document.getElementById("winners-list").innerHTML = data.winners.map((w,i)=>`
+      <div style="padding:16px 0;border-bottom:1px solid var(--border);${i===data.winners.length-1?'border-bottom:none;':''}">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="font-size:1.3rem;font-weight:800;min-width:28px;color:var(--primary);">
+            ${["🥇","🥈","🥉"][i]||`第${i+1}`}
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:1.1rem;font-weight:700;">${esc(w.display_name||"—")}</div>
+            <div style="font-size:.82rem;color:var(--muted);">M${w.member_number}</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <input type="text" placeholder="輸入禮物名稱…" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.92rem;" id="gift-${i}">
+        </div>
+      </div>`).join("");
+    document.getElementById("winners-area").style.display="";
+    document.getElementById("winners-area").scrollIntoView({behavior:"smooth"});
   }
 </script>
 {% endblock %}
