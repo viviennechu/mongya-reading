@@ -97,12 +97,9 @@ def admin_panel():
     return render_template("admin.html")
 
 
-# ── 聊天記錄匯入（import_records / auto-award point on import）───
+# ── 聊天記錄匯入 ───────────────────────────────────────────────────
 def import_records(records: list) -> dict:
-    """
-    逐筆去重後插入，並對每筆新記錄給 member +1 點。
-    回傳 import result summary。
-    """
+    """逐筆去重後插入，不自動給點數（點數由 LINE Bot 手動發放）。"""
     inserted = 0
     skipped_duplicate = 0
 
@@ -138,23 +135,6 @@ def import_records(records: list) -> dict:
             content_hash=h,
         )
         db.session.add(reading)
-
-        # auto-award point on import — 每月每人最多 +1 點
-        if member is not None:
-            month_label = f"{rec['month']}月共讀"
-            already_awarded = PointTransaction.query.filter(
-                PointTransaction.member_id == member.id,
-                PointTransaction.reason.like(f"{rec['month']}月共讀%"),
-                PointTransaction.delta > 0,
-            ).first()
-            if not already_awarded:
-                tx = PointTransaction(
-                    member_id=member.id,
-                    delta=1,
-                    reason=month_label,
-                )
-                db.session.add(tx)
-
         inserted += 1
 
     db.session.commit()
@@ -618,6 +598,70 @@ def api_admin_fulfill(redemption_id: int):
     redemption.fulfilled = True   # 冪等：已 fulfilled 也直接設定
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# ── 共讀抽獎 ───────────────────────────────────────────────────
+@app.route("/api/admin/monthly-participants")
+@admin_required
+def api_admin_monthly_participants():
+    """回傳指定月份有發共讀的成員清單（去重）。"""
+    import random
+    month = request.args.get("month", "")
+    if not month:
+        return jsonify({"error": "缺少 month 參數"}), 400
+
+    rows = (
+        db.session.query(Member.member_number, Member.display_name)
+        .join(Reading, Reading.member_id == Member.id)
+        .filter(Reading.month == month)
+        .distinct()
+        .order_by(Member.member_number)
+        .all()
+    )
+    participants = [{"member_number": r.member_number, "display_name": r.display_name or ""} for r in rows]
+    return jsonify({"month": month, "participants": participants, "count": len(participants)})
+
+
+@app.route("/api/admin/monthly-draw", methods=["POST"])
+@admin_required
+def api_admin_monthly_draw():
+    """從指定月份的共讀名單中隨機抽出一位得獎者。"""
+    import random
+    data = request.get_json(force=True) or {}
+    month = str(data.get("month", ""))
+    if not month:
+        return jsonify({"error": "缺少 month"}), 400
+
+    rows = (
+        db.session.query(Member.member_number, Member.display_name)
+        .join(Reading, Reading.member_id == Member.id)
+        .filter(Reading.month == month)
+        .distinct()
+        .all()
+    )
+    if not rows:
+        return jsonify({"error": f"{month}月沒有共讀紀錄"}), 404
+
+    winner = random.choice(rows)
+    return jsonify({
+        "month": month,
+        "winner": {"member_number": winner.member_number, "display_name": winner.display_name or ""},
+        "pool_size": len(rows),
+    })
+
+
+@app.route("/api/admin/clear-reading-points", methods=["POST"])
+@admin_required
+def api_admin_clear_reading_points():
+    """一次性清除所有因匯入共讀記錄而自動發放的點數（reason 格式：X月共讀）。"""
+    txs = PointTransaction.query.filter(
+        PointTransaction.reason.like("%月共讀")
+    ).all()
+    count = len(txs)
+    for tx in txs:
+        db.session.delete(tx)
+    db.session.commit()
+    return jsonify({"ok": True, "deleted": count})
 
 
 # ── 網頁路由 ──────────────────────────────────────────────────

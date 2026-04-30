@@ -17,6 +17,7 @@
   <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
     <button class="tab-btn active" data-tab="import" onclick="switchTab('import')">📥 匯入</button>
     <button class="tab-btn" data-tab="members" onclick="switchTab('members')">👥 成員點數</button>
+    <button class="tab-btn" data-tab="lottery" onclick="switchTab('lottery')">🎰 共讀抽獎</button>
     <button class="tab-btn" data-tab="rewards" onclick="switchTab('rewards')">🎁 獎品</button>
     <button class="tab-btn" data-tab="redemptions" onclick="switchTab('redemptions')">📦 兌換紀錄</button>
   </div>
@@ -31,12 +32,19 @@
     </div>
     <div class="card">
       <h3 style="margin-bottom:16px;">上傳 LINE 聊天記錄</h3>
+      <p class="muted" style="font-size:.88rem;margin-bottom:12px;">匯入後僅記錄共讀內容，<strong>不</strong>自動給點數。點數由 LINE Bot 手動發放，共讀記錄作為抽獎資格依據。</p>
       <div class="form-group">
         <label>選擇 .txt 檔案（LINE 群組匯出）</label>
         <input type="file" id="import-file" accept=".txt" />
       </div>
       <button class="btn btn-primary" onclick="doImport()">開始匯入</button>
       <div id="import-result" style="margin-top:16px;"></div>
+    </div>
+    <div class="card" style="margin-top:16px;border:1.5px solid var(--red);">
+      <h3 style="margin-bottom:8px;color:var(--red);">⚠️ 一次性清除：過去自動給的共讀點數</h3>
+      <p class="muted" style="font-size:.88rem;margin-bottom:12px;">清除所有以「X月共讀」為原因自動發放的點數紀錄。此動作不可復原，確認後請按按鈕。</p>
+      <button class="btn" style="background:var(--red);color:#fff;" onclick="doClearReadingPoints()">清除共讀點數</button>
+      <div id="clear-points-result" style="margin-top:12px;"></div>
     </div>
   </div>
 
@@ -140,6 +148,34 @@
 
   <!-- 兌換紀錄 -->
   <div id="tab-redemptions" style="display:none;"><div id="redemptions-list"></div></div>
+
+  <!-- 共讀抽獎 -->
+  <div id="tab-lottery" style="display:none;">
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:12px;">🎰 X月共讀抽獎</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+        <select id="lottery-month" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.95rem;">
+          <option value="">選擇月份</option>
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+          <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+        <button class="btn btn-outline" onclick="loadParticipants()">載入名單</button>
+      </div>
+      <div id="lottery-list" style="margin-bottom:16px;"></div>
+      <button class="btn btn-primary" id="draw-btn" style="display:none;font-size:1rem;padding:12px 28px;" onclick="doDraw()">🎰 開始抽獎！</button>
+    </div>
+    <div id="winner-card" style="display:none;">
+      <div class="card" style="text-align:center;padding:32px;border:2px solid var(--primary);background:var(--light);">
+        <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
+        <div style="font-size:.9rem;color:var(--muted);margin-bottom:4px;">本次得獎者</div>
+        <div id="winner-name" style="font-size:1.6rem;font-weight:800;color:var(--primary);margin-bottom:4px;"></div>
+        <div id="winner-mno" style="font-size:.95rem;color:var(--muted);margin-bottom:12px;"></div>
+        <div id="winner-pool" style="font-size:.82rem;color:var(--muted);"></div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -322,13 +358,68 @@
   }
 
   function switchTab(tab){
-    ["import","members","rewards","redemptions"].forEach(t=>{
+    ["import","members","lottery","rewards","redemptions"].forEach(t=>{
       document.querySelector(`[data-tab="${t}"]`).classList.toggle("active",t===tab);
       document.getElementById(`tab-${t}`).style.display=t===tab?"":"none";
     });
     if(tab==="members") loadMembers();
     if(tab==="rewards") loadRewards();
     if(tab==="redemptions") loadRedemptions();
+  }
+
+  // ── 清除共讀點數 ──
+  async function doClearReadingPoints(){
+    if(!confirm("確定要清除所有「X月共讀」自動點數嗎？此動作不可復原！")) return;
+    const res = await fetch("/api/admin/clear-reading-points", {method:"POST"});
+    const data = await res.json();
+    const el = document.getElementById("clear-points-result");
+    if(data.ok){
+      el.innerHTML = `<div class="badge badge-green" style="font-size:.9rem;padding:6px 14px;">✓ 已清除 ${data.deleted} 筆共讀點數紀錄</div>`;
+    } else {
+      el.innerHTML = `<span style="color:var(--red)">⚠️ ${esc(data.error||"失敗")}</span>`;
+    }
+  }
+
+  // ── 抽獎 ──
+  async function loadParticipants(){
+    const month = document.getElementById("lottery-month").value;
+    if(!month){ toast("請先選擇月份"); return; }
+    const res = await fetch(`/api/admin/monthly-participants?month=${month}`);
+    const data = await res.json();
+    const el = document.getElementById("lottery-list");
+    document.getElementById("winner-card").style.display = "none";
+    if(data.error){ el.innerHTML=`<span style="color:var(--red)">${esc(data.error)}</span>`; document.getElementById("draw-btn").style.display="none"; return; }
+    if(!data.participants.length){
+      el.innerHTML=`<div class="muted" style="padding:12px;">${month}月沒有共讀紀錄</div>`;
+      document.getElementById("draw-btn").style.display="none";
+      return;
+    }
+    el.innerHTML=`
+      <div class="muted" style="font-size:.85rem;margin-bottom:8px;">共 ${data.count} 位成員參加 ${month}月共讀</div>
+      <div class="card">${data.participants.map(p=>`
+        <div class="row">
+          <span style="font-size:.82rem;color:var(--muted);min-width:40px;">M${p.member_number}</span>
+          <span>${esc(p.display_name||"—")}</span>
+        </div>`).join("")}
+      </div>`;
+    document.getElementById("draw-btn").style.display="";
+  }
+
+  async function doDraw(){
+    const month = document.getElementById("lottery-month").value;
+    if(!month){ toast("請先選擇月份"); return; }
+    const btn = document.getElementById("draw-btn");
+    btn.disabled=true; btn.textContent="抽獎中…";
+    const res = await fetch("/api/admin/monthly-draw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month})});
+    const data = await res.json();
+    btn.disabled=false; btn.textContent="🎰 開始抽獎！";
+    if(data.error){ toast("⚠️ "+data.error); return; }
+    const w = data.winner;
+    document.getElementById("winner-name").textContent = w.display_name || "—";
+    document.getElementById("winner-mno").textContent = `M${w.member_number}`;
+    document.getElementById("winner-pool").textContent = `從 ${data.pool_size} 位參與者中抽出`;
+    document.getElementById("winner-card").style.display="";
+    document.getElementById("winner-card").scrollIntoView({behavior:"smooth"});
   }
 </script>
 {% endblock %}
