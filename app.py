@@ -485,6 +485,34 @@ def api_bot_award_point():
     return jsonify({"ok": True, "member_number": member_number, "new_points": member.points})
 
 
+@app.route("/api/bot/ensure-member", methods=["POST"])
+def api_bot_ensure_member():
+    """LINE Bot 呼叫：確保 Member 記錄存在（審核通過時建立，讓客人能去網站註冊）。"""
+    secret = os.environ.get("BOT_API_SECRET", "")
+    if not secret:
+        return jsonify({"error": "未設定 BOT_API_SECRET"}), 500
+    auth = request.headers.get("X-Bot-Secret", "")
+    if auth != secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(force=True) or {}
+    member_number = data.get("member_number")
+    display_name = data.get("display_name", "")
+    try:
+        member_number = int(member_number)
+    except (ValueError, TypeError):
+        return jsonify({"error": "參數格式錯誤"}), 400
+
+    member = Member.query.filter_by(member_number=member_number).first()
+    if member:
+        return jsonify({"ok": True, "created": False, "member_number": member_number})
+
+    member = Member(member_number=member_number, display_name=display_name)
+    db.session.add(member)
+    db.session.commit()
+    return jsonify({"ok": True, "created": True, "member_number": member_number})
+
+
 @app.route("/api/bot/member-points", methods=["GET"])
 def api_bot_member_points():
     """LINE Bot 呼叫：查詢 M 編號的點數（用 API Secret 驗證）。"""
