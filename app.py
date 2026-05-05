@@ -617,6 +617,27 @@ def api_admin_update_gmail(member_number: int):
     return jsonify({"ok": True, "gmail": member.gmail or ""})
 
 
+@app.route("/api/admin/member/<int:member_number>/transactions", methods=["GET"])
+@admin_required
+def api_admin_member_transactions(member_number: int):
+    """後台查詢指定成員的點數明細。"""
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+    txs = (PointTransaction.query
+           .filter_by(member_id=member.id)
+           .order_by(PointTransaction.created_at.desc())
+           .limit(100)
+           .all())
+    return jsonify([{
+        "id": t.id,
+        "delta": t.delta,
+        "reason": t.reason,
+        "admin_note": t.admin_note or "",
+        "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "",
+    } for t in txs])
+
+
 @app.route("/api/admin/redemptions/<int:redemption_id>/fulfill", methods=["POST"])
 @admin_required
 def api_admin_fulfill(redemption_id: int):

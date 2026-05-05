@@ -105,6 +105,17 @@
       </div>
     </div>
 
+    <!-- 點數明細 modal -->
+    <div id="tx-modal" class="overlay">
+      <div class="card" style="width:100%;max-width:480px;margin:0;max-height:80vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3 id="tx-modal-title" style="margin:0;">點數明細</h3>
+          <button class="btn btn-outline btn-sm" onclick="closeTxModal()">✕</button>
+        </div>
+        <div id="tx-list"></div>
+      </div>
+    </div>
+
     <!-- 補點 modal -->
     <div id="point-modal" class="overlay">
       <div class="card" style="width:100%;max-width:360px;margin:0;">
@@ -265,11 +276,30 @@
         <span style="font-size:.85rem;color:var(--muted);min-width:36px;">M${m.member_number}</span>
         <span style="flex:1;font-size:.95rem;min-width:80px;">${esc(m.display_name||"—")}</span>
         <span style="font-weight:800;color:var(--primary);min-width:40px;text-align:right;">${m.points}</span>
-        <button class="btn btn-outline btn-sm" onclick="openPointModal(${m.member_number},'${esc(m.display_name||"")}')">點數</button>
+        <button class="btn btn-outline btn-sm" onclick="openTxModal(${m.member_number},'${esc(m.display_name||"")}')">明細</button>
+        <button class="btn btn-outline btn-sm" onclick="openPointModal(${m.member_number},'${esc(m.display_name||"")}')">補點</button>
         <button class="btn btn-outline btn-sm" onclick="openGmailModal(${m.member_number},'${esc(m.display_name||"")}','${esc(m.gmail||"")}')">Gmail</button>
         <div style="flex-basis:100%;font-size:.78rem;color:var(--muted);padding-left:4px;">${m.gmail?'📧 '+esc(m.gmail):'<span style="opacity:.5;">未設 Gmail</span>'}</div>
       </div>`).join("")}</div>`;
   }
+  async function openTxModal(mno, name){
+    document.getElementById("tx-modal-title").textContent=`M${mno}「${name}」點數明細`;
+    document.getElementById("tx-list").innerHTML=`<div class="muted" style="padding:16px;text-align:center;">載入中…</div>`;
+    document.getElementById("tx-modal").classList.add("open");
+    const res=await fetch(`/api/admin/member/${mno}/transactions`);
+    const txs=await res.json();
+    if(!txs.length){ document.getElementById("tx-list").innerHTML=`<div class="muted" style="padding:16px;text-align:center;">尚無記錄</div>`; return; }
+    document.getElementById("tx-list").innerHTML=txs.map(t=>`
+      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);gap:8px;align-items:flex-start;">
+        <span style="font-weight:700;color:${t.delta>0?'var(--primary)':'var(--red)'};min-width:40px;">${t.delta>0?'+'+t.delta:t.delta}</span>
+        <div style="flex:1;">
+          <div style="font-size:.9rem;">${esc(t.reason)}</div>
+          ${t.admin_note?`<div style="font-size:.78rem;color:var(--muted);">${esc(t.admin_note)}</div>`:''}
+        </div>
+        <span style="font-size:.78rem;color:var(--muted);white-space:nowrap;">${t.created_at}</span>
+      </div>`).join("");
+  }
+  function closeTxModal(){ document.getElementById("tx-modal").classList.remove("open"); }
   function openGmailModal(mno,name,gmail){
     document.getElementById("gmail-modal-mno").value=mno;
     document.getElementById("gmail-modal-title").textContent=`修改 M${mno}「${name}」的 Gmail`;
