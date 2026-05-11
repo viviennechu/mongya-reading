@@ -556,6 +556,24 @@ def api_admin_all_point():
     return jsonify({"ok": True, "count": len(members)})
 
 
+@app.route("/api/admin/member/create", methods=["POST"])
+@admin_required
+def api_admin_member_create():
+    data = request.get_json(force=True) or {}
+    mno = data.get("member_number")
+    name = str(data.get("display_name") or "").strip()
+    if not mno or int(mno) <= 0:
+        return jsonify({"error": "請填有效的 M 編號"}), 400
+    mno = int(mno)
+    existing = Member.query.filter_by(member_number=mno).first()
+    if existing:
+        return jsonify({"ok": True, "already_exists": True, "display_name": existing.display_name})
+    member = Member(member_number=mno, display_name=name)
+    db.session.add(member)
+    db.session.commit()
+    return jsonify({"ok": True, "already_exists": False, "display_name": name})
+
+
 @app.route("/api/admin/sync-members", methods=["POST"])
 @admin_required
 def api_admin_sync_members():

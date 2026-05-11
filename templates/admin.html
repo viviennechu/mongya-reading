@@ -30,6 +30,22 @@
       <button class="btn btn-primary" onclick="doSync()" id="sync-btn">同步名單</button>
       <div id="sync-result" style="margin-top:12px;"></div>
     </div>
+    <div class="card" style="margin-top:16px;">
+      <h3 style="margin-bottom:8px;">➕ 手動新增會員</h3>
+      <p class="muted" style="font-size:.88rem;margin-bottom:12px;">當會員無法透過 Bot 加入時，直接在這裡建立帳號，讓他能去網站設密碼。</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:.85rem;">M 編號</label>
+          <input type="number" id="new-member-number" placeholder="例如 1572" style="width:130px;" />
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:.85rem;">姓名（選填）</label>
+          <input type="text" id="new-member-name" placeholder="顯示名稱" style="width:160px;" />
+        </div>
+        <button class="btn btn-primary" onclick="doAddMember()">新增</button>
+      </div>
+      <div id="add-member-result" style="margin-top:12px;"></div>
+    </div>
     <div class="card">
       <h3 style="margin-bottom:16px;">上傳 LINE 聊天記錄</h3>
       <p class="muted" style="font-size:.88rem;margin-bottom:12px;">匯入後僅記錄共讀內容，<strong>不</strong>自動給點數。點數由 LINE Bot 手動發放，共讀記錄作為抽獎資格依據。</p>
@@ -212,6 +228,29 @@
     btn.disabled=false; btn.textContent="同步名單";
     if(data.error){ result.innerHTML=`<span style="color:var(--red)">${esc(data.error)}</span>`; return; }
     result.innerHTML=`<div class="badge badge-green" style="font-size:.9rem;padding:6px 14px;">新增 ${data.created} 人・更新名稱 ${data.updated} 人・無變動 ${data.skipped} 人</div>`;
+  }
+
+  async function doAddMember(){
+    const mno = document.getElementById("new-member-number").value.trim();
+    const name = document.getElementById("new-member-name").value.trim();
+    const result = document.getElementById("add-member-result");
+    if(!mno){ result.innerHTML=`<span style="color:var(--red)">請填 M 編號</span>`; return; }
+    result.textContent="新增中…";
+    const res = await fetch("/api/admin/member/create", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({member_number: parseInt(mno), display_name: name})
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      result.innerHTML=`<span style="color:var(--red)">${esc(data.error||"新增失敗")}</span>`;
+    } else if(data.already_exists){
+      result.innerHTML=`<div class="badge" style="background:#f0f0f0;color:#666;font-size:.9rem;padding:6px 14px;">M${mno} 已存在（${esc(data.display_name)}），不重複新增</div>`;
+    } else {
+      result.innerHTML=`<div class="badge badge-green" style="font-size:.9rem;padding:6px 14px;">✅ M${mno}（${esc(data.display_name||"未命名")}）已建立，會員可去網站設密碼了</div>`;
+      document.getElementById("new-member-number").value="";
+      document.getElementById("new-member-name").value="";
+    }
   }
 
   // ── 匯入 ──
