@@ -51,7 +51,15 @@
     <button class="tab-btn" data-tab="rdhistory" onclick="switchTab('rdhistory')">🎀 兌換紀錄</button>
   </div>
 
-  <div id="tab-redeem"><div id="rewards-list"></div></div>
+  <div id="tab-redeem">
+    <div style="margin-bottom:12px;">
+      <input id="reward-search" type="text" placeholder="🔍 搜尋獎品名稱或期數…"
+        style="width:100%;box-sizing:border-box;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px;font-size:.95rem;outline:none;"
+        oninput="filterRewards()" />
+    </div>
+    <div id="rewards-list"></div>
+    <div id="rewards-empty" style="display:none;text-align:center;padding:24px 0;" class="muted">找不到符合的獎品</div>
+  </div>
   <div id="tab-history" style="display:none;"><div id="tx-list"></div></div>
   <div id="tab-rdhistory" style="display:none;"><div id="rd-list"></div></div>
 </div>
@@ -99,11 +107,17 @@
       </div>`).join("")}</div>`;
   }
 
-  async function loadRewards() {
-    const res = await fetch("/api/rewards");
-    const rewards = await res.json();
+  let _allRewards = [];
+
+  function renderRewards(rewards) {
     const el = document.getElementById("rewards-list");
-    if (!rewards.length) { el.innerHTML = `<div class="muted" style="padding:20px 0;text-align:center;">目前沒有可兌換的獎品</div>`; return; }
+    const empty = document.getElementById("rewards-empty");
+    if (!rewards.length) {
+      el.innerHTML = "";
+      empty.style.display = "";
+      return;
+    }
+    empty.style.display = "none";
     el.innerHTML = rewards.map(r => {
       const canAfford = curPts >= r.points_required;
       const soldOut = r.remaining === 0;
@@ -121,6 +135,28 @@
         </div>
       </div>`;
     }).join("");
+  }
+
+  function filterRewards() {
+    const q = (document.getElementById("reward-search").value || "").trim().toLowerCase();
+    if (!q) { renderRewards(_allRewards); return; }
+    const filtered = _allRewards.filter(r =>
+      (r.name || "").toLowerCase().includes(q) ||
+      (r.description || "").toLowerCase().includes(q)
+    );
+    renderRewards(filtered);
+  }
+
+  async function loadRewards() {
+    const res = await fetch("/api/rewards");
+    _allRewards = await res.json();
+    const el = document.getElementById("rewards-list");
+    const empty = document.getElementById("rewards-empty");
+    if (!_allRewards.length) {
+      el.innerHTML = `<div class="muted" style="padding:20px 0;text-align:center;">目前沒有可兌換的獎品</div>`;
+      return;
+    }
+    filterRewards();
   }
 
   async function redeem(rid, name, pts) {
