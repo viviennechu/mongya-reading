@@ -8,15 +8,35 @@ from datetime import datetime, timezone, timedelta
 
 TW = timezone(timedelta(hours=8))
 
+# ── 月份正規化：中文數字 → 阿拉伯數字 ────────────────────────────
+_CN_MONTH = {
+    "一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
+    "六": "6", "七": "7", "八": "8", "九": "9",
+    "十": "10", "十一": "11", "十二": "12",
+}
+
+def _normalize_month(raw: str) -> str:
+    return _CN_MONTH.get(raw, raw)
+
+# 月份 pattern：阿拉伯或中文數字（十一/十二優先於十）
+_MP = r"(1[0-2]|[1-9]|十[一二]|十|[一二三四五六七八九])"
+# 前後裝飾字元（「」【】[]~~等）
+_PRE = r"[「【\[~～]*"
+_SUF = r"[」】\]~～]*"
+
 # ── 共讀格式正則（設計文件：聊天記錄解析策略）──────────────────────
 # 每則訊息的第一行依序嘗試，任一命中即解析
 _READING_PATTERNS = [
-    # 7月共讀分享：書名  /  7月共讀分享:書名
-    re.compile(r"^(1[0-2]|[1-9])月共讀分享[：:]\s*(.*)$"),
-    # 7月共讀：書名
-    re.compile(r"^(1[0-2]|[1-9])月共讀[：:]\s*(.*)$"),
-    # 【2月共讀】書名  /  [2月共讀] 書名
-    re.compile(r"^[【\[](1[0-2]|[1-9])月共讀[】\]]\s*(.*)$"),
+    # 4月/四月共讀分享：書名  (最嚴格先匹配)
+    re.compile(rf"^{_PRE}{_MP}月共讀分享{_SUF}[：:]\s*(.*)$"),
+    # 4月/四月共讀：書名  /  「4月共讀」：書名
+    re.compile(rf"^{_PRE}{_MP}月共讀{_SUF}[：:]\s*(.*)$"),
+    # 【4月共讀】書名  /  「4月共讀」書名  /  ~~4月共讀~~ 書名
+    re.compile(rf"^[「【\[~～]+{_MP}月共讀[」】\]~～]+\s*(.*)$"),
+    # 4月共讀 書名  (空格分隔)
+    re.compile(rf"^{_PRE}{_MP}月共讀{_SUF}\s+(.+)$"),
+    # 4月共讀  (單獨一行，無書名，書名在後續行)
+    re.compile(rf"^{_PRE}{_MP}月共讀{_SUF}\s*$"),
 ]
 
 # LINE 訊息行格式：  上午/下午HH:MM \t 發送者 \t 內容
@@ -63,7 +83,10 @@ def _match_reading(first_line: str) -> tuple[str, str] | None:
     for pattern in _READING_PATTERNS:
         m = pattern.match(first_line.strip())
         if m:
-            return m.group(1), m.group(2).strip()
+            raw_month = m.group(1)
+            book_title = (m.group(2).strip()
+                          if m.lastindex >= 2 and m.group(2) else "")
+            return _normalize_month(raw_month), book_title
     return None
 
 
