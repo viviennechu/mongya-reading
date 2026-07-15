@@ -150,7 +150,13 @@
   <!-- 獎品 -->
   <div id="tab-rewards" style="display:none;">
     <button class="btn btn-primary btn-sm" onclick="openRewardForm(null)" style="margin-bottom:12px;">＋ 新增獎品</button>
+    <div style="margin-bottom:12px;">
+      <input id="admin-reward-search" type="text" placeholder="🔍 搜尋獎品名稱或期數…"
+        style="width:100%;box-sizing:border-box;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px;font-size:.95rem;outline:none;"
+        oninput="filterAdminRewards()" />
+    </div>
     <div id="rewards-list"></div>
+    <div id="rewards-empty" style="display:none;text-align:center;padding:24px 0;" class="muted">找不到符合的獎品</div>
 
     <div id="reward-modal" class="overlay">
       <div class="card" style="width:100%;max-width:400px;margin:0;">
@@ -374,11 +380,29 @@
   }
 
   // ── 獎品 ──
+  let _allAdminRewards=[];
   async function loadRewards(){
     const res=await fetch("/api/admin/rewards");
-    const rewards=await res.json();
+    _allAdminRewards=await res.json();
+    if(!_allAdminRewards.length){
+      document.getElementById("rewards-list").innerHTML=`<div class="muted" style="padding:20px;text-align:center;">尚無獎品</div>`;
+      document.getElementById("rewards-empty").style.display="none";
+      return;
+    }
+    filterAdminRewards();
+  }
+  function filterAdminRewards(){
+    const q=(document.getElementById("admin-reward-search").value||"").trim().toLowerCase();
+    const list=q?_allAdminRewards.filter(r=>
+      (r.name||"").toLowerCase().includes(q)||
+      (r.description||"").toLowerCase().includes(q)
+    ):_allAdminRewards;
+    renderAdminRewards(list);
+  }
+  function renderAdminRewards(rewards){
     const el=document.getElementById("rewards-list");
-    if(!rewards.length){ el.innerHTML=`<div class="muted" style="padding:20px;text-align:center;">尚無獎品</div>`; return; }
+    const empty=document.getElementById("rewards-empty");
+    empty.style.display=rewards.length?"none":"";
     el.innerHTML=rewards.map(r=>`
       <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="flex:1;min-width:0;">
