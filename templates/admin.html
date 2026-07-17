@@ -324,6 +324,7 @@
         <button class="btn btn-outline btn-sm" onclick="openTxModal(${m.member_number},'${esc(m.display_name||"")}')">明細</button>
         <button class="btn btn-outline btn-sm" onclick="openPointModal(${m.member_number},'${esc(m.display_name||"")}')">補點</button>
         <button class="btn btn-outline btn-sm" onclick="openGmailModal(${m.member_number},'${esc(m.display_name||"")}','${esc(m.gmail||"")}')">Gmail</button>
+        <button class="btn btn-outline btn-sm" onclick="resetPassword(${m.member_number},'${esc(m.display_name||"")}')">重設密碼</button>
         <div style="flex-basis:100%;font-size:.78rem;color:var(--muted);padding-left:4px;">${m.gmail?'📧 '+esc(m.gmail):'<span style="opacity:.5;">未設 Gmail</span>'}</div>
       </div>`).join("")}</div>`;
   }
@@ -345,6 +346,13 @@
       </div>`).join("");
   }
   function closeTxModal(){ document.getElementById("tx-modal").classList.remove("open"); }
+  async function resetPassword(mno,name){
+    if(!confirm(`確定要重設 M${mno}「${name}」的密碼嗎？\n重設後對方要到「申請帳號」頁面重新設定密碼。`)) return;
+    const res=await fetch(`/api/admin/member/${mno}/reset-password`,{method:"POST"});
+    const data=await res.json();
+    if(data.ok) toast(`已重設 M${mno} 的密碼，請通知對方重新設定`);
+    else toast("⚠️ "+data.error);
+  }
   function openGmailModal(mno,name,gmail){
     document.getElementById("gmail-modal-mno").value=mno;
     document.getElementById("gmail-modal-title").textContent=`修改 M${mno}「${name}」的 Gmail`;

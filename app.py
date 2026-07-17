@@ -535,6 +535,43 @@ def api_bot_member_points():
     return jsonify({"member_number": member_number, "display_name": member.display_name, "points": member.points})
 
 
+@app.route("/api/bot/reset-password", methods=["POST"])
+def api_bot_reset_password():
+    """LINE Bot 呼叫：清除指定 M 編號的密碼，讓會員重新到網站設定（用 API Secret 驗證）。"""
+    secret = os.environ.get("BOT_API_SECRET", "")
+    if not secret:
+        return jsonify({"error": "未設定 BOT_API_SECRET"}), 500
+    auth = request.headers.get("X-Bot-Secret", "")
+    if auth != secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(force=True) or {}
+    try:
+        member_number = int(data.get("member_number"))
+    except (ValueError, TypeError):
+        return jsonify({"error": "參數格式錯誤"}), 400
+
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+
+    member.password_hash = None
+    db.session.commit()
+    return jsonify({"ok": True, "member_number": member_number})
+
+
+@app.route("/api/admin/member/<int:member_number>/reset-password", methods=["POST"])
+@admin_required
+def api_admin_reset_password(member_number):
+    """後台：清除會員密碼，讓會員重新到網站設定。"""
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+    member.password_hash = None
+    db.session.commit()
+    return jsonify({"ok": True, "member_number": member_number})
+
+
 @app.route("/api/admin/all-point", methods=["POST"])
 @admin_required
 def api_admin_all_point():
