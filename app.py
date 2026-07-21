@@ -611,6 +611,43 @@ def api_admin_member_create():
     return jsonify({"ok": True, "already_exists": False, "display_name": name})
 
 
+@app.route("/api/admin/member/<int:member_number>/delete", methods=["POST"])
+@admin_required
+def api_admin_member_delete(member_number):
+    """後台：刪除會員。有點數或兌換記錄的預設擋下來，要帶 force 才真的刪。
+    刪掉就找不回來了，點數歷史也會一起消失，所以預設先問清楚。"""
+    member = Member.query.filter_by(member_number=member_number).first()
+    if not member:
+        return jsonify({"error": "找不到此 M 編號"}), 404
+
+    tx_count = PointTransaction.query.filter_by(member_id=member.id).count()
+    rd_count = Redemption.query.filter_by(member_id=member.id).count()
+    reading_count = Reading.query.filter_by(member_id=member.id).count()
+
+    data = request.get_json(silent=True) or {}
+    if (tx_count or rd_count) and not data.get("force"):
+        return jsonify({
+            "error": "此會員有點數或兌換記錄",
+            "need_confirm": True,
+            "member_number": member_number,
+            "display_name": member.display_name or "",
+            "points": member.points,
+            "transactions": tx_count,
+            "redemptions": rd_count,
+            "readings": reading_count,
+        }), 409
+
+    # 共讀記錄留著（是社群的共同回憶），只解掉跟這個會員的關聯
+    Reading.query.filter_by(member_id=member.id).update({"member_id": None})
+    PointTransaction.query.filter_by(member_id=member.id).delete()
+    Redemption.query.filter_by(member_id=member.id).delete()
+    db.session.delete(member)
+    db.session.commit()
+    return jsonify({"ok": True, "member_number": member_number,
+                    "deleted": {"transactions": tx_count, "redemptions": rd_count},
+                    "readings_kept": reading_count})
+
+
 @app.route("/api/admin/sync-members", methods=["POST"])
 @admin_required
 def api_admin_sync_members():
