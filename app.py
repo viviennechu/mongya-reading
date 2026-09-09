@@ -36,6 +36,17 @@ def init_db():
 
 with app.app_context():
     db.create_all()
+    # create_all 不會幫既有資料表加欄位，新欄位在這裡補（Postgres / SQLite 都試一下，已存在就略過）
+    try:
+        db.session.execute(db.text("ALTER TABLE members ADD COLUMN IF NOT EXISTS name_self_edited BOOLEAN DEFAULT FALSE"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE members ADD COLUMN name_self_edited BOOLEAN DEFAULT 0"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 
 # ── 管理員驗證（admin authentication / 管理員驗證）────────────────
@@ -46,7 +57,7 @@ def get_drive_service():
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
     scopes = [
         "https://www.googleapis.com/auth/drive.readonly",
-        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/spreadsheets",   # 會員自改名字要回寫名單，讀寫都要
     ]
     if sa_json:
         info = json.loads(sa_json)
@@ -684,8 +695,11 @@ def api_admin_sync_members():
             db.session.add(member)
             created += 1
         elif member.display_name != display_name:
-            member.display_name = display_name
-            updated += 1
+            if member.name_self_edited:
+                skipped += 1   # 會員在網站自己改過名字，以會員為準（名單那邊改名時也已回寫）
+            else:
+                member.display_name = display_name
+                updated += 1
         else:
             skipped += 1
 
@@ -889,6 +903,49 @@ def api_member_update_gmail():
     member.gmail = gmail or None
     db.session.commit()
     return jsonify({"ok": True, "gmail": member.gmail or ""})
+
+
+def _writeback_member_name_to_sheet(member_number: int, new_name: str) -> bool:
+    """把會員改的名字回寫到 Google Sheets 名單（欄A=名稱, 欄B=M編號），讓老師名單與 LINE bot 查名字一致。
+    找不到列或沒權限就回 False，不影響網站端的更新。"""
+    try:
+        creds = get_drive_service()
+        sheets = build("sheets", "v4", credentials=creds)
+        rows = sheets.spreadsheets().values().get(
+            spreadsheetId=SHEETS_ID, range="工作表1!A2:B").execute().get("values", [])
+        for i, row in enumerate(rows, start=2):
+            if len(row) >= 2 and str(row[1]).strip() == str(member_number):
+                sheets.spreadsheets().values().update(
+                    spreadsheetId=SHEETS_ID, range=f"工作表1!A{i}",
+                    valueInputOption="RAW", body={"values": [[new_name]]}).execute()
+                return True
+    except Exception as e:
+        app.logger.warning(f"名字回寫名單失敗 M{member_number}: {e}")
+    return False
+
+
+@app.route("/api/member/name", methods=["POST"])
+def api_member_update_name():
+    """會員自己改顯示名稱（1～20 字）。同步回寫 Google Sheets 名單，並標記自改過、後台同步不覆蓋。"""
+    mno = session.get("member_number")
+    if not mno:
+        return jsonify({"error": "請先登入"}), 401
+    data = request.get_json(force=True) or {}
+    name = " ".join((data.get("name") or "").split())   # 去頭尾與重複空白
+    if not name:
+        return jsonify({"error": "名字不能空白"}), 400
+    if len(name) > 20:
+        return jsonify({"error": "名字最多 20 個字"}), 400
+    member = Member.query.filter_by(member_number=mno).first()
+    if not member:
+        return jsonify({"error": "找不到成員"}), 404
+    if name == (member.display_name or ""):
+        return jsonify({"ok": True, "name": name, "unchanged": True})
+    member.display_name = name
+    member.name_self_edited = True
+    db.session.commit()
+    synced = _writeback_member_name_to_sheet(member.member_number, name)
+    return jsonify({"ok": True, "name": name, "sheet_synced": synced})
 
 
 @app.route("/member/logout")
