@@ -122,3 +122,8 @@ Service account 金鑰（本機用）：`~/Downloads/monya-492013-4490bf83f33c.j
 - [ ] 兌換時自動將 Drive 資料夾共享給會員 Gmail
 - [ ] 後台可直接搜尋 / 刪除特定共讀紀錄
 - [ ] 匯入時顯示詳細的成員點數異動摘要
+
+## 2026-09-10 會員自改名字
+- 會員頁名字旁 ✏️ → `POST /api/member/name`（1～20 字）。
+- 改過會標 `members.name_self_edited`，後台「同步名單」不覆蓋；同時回寫名單試算表（工作表1 A 欄）。
+- 啟動時自動補 `name_self_edited` 欄位（ALTER TABLE IF NOT EXISTS）。
