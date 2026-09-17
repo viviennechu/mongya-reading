@@ -103,6 +103,7 @@ class Reward(db.Model):
     stock = db.Column(db.Integer, default=-1)      # -1 = 無限量
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     redemption_url = db.Column(db.Text, default="")   # 兌換成功後顯示的連結
+    pinned_at = db.Column(db.DateTime(timezone=True), nullable=True)   # 置頂時間，None = 沒置頂；越晚置頂排越前面
 
     redemptions = db.relationship("Redemption", backref="reward", lazy="dynamic")
 
@@ -123,6 +124,7 @@ class Reward(db.Model):
             "remaining": self.remaining,
             "is_active": self.is_active,
             "redemption_url": self.redemption_url or "",
+            "is_pinned": self.pinned_at is not None,
         }
 
 

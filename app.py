@@ -10,7 +10,7 @@ from flask import (
     session, jsonify, render_template,
 )
 
-from models import db, Member, Reading, PointTransaction, Reward, Redemption, LibraryArticle, RecommendedBook
+from models import db, Member, Reading, PointTransaction, Reward, Redemption, LibraryArticle, RecommendedBook, tw_now
 from parser import parse_chat_export, compute_content_hash
 
 # ── Flask 初始化 ──────────────────────────────────────────────
@@ -47,6 +47,21 @@ with app.app_context():
             db.session.commit()
         except Exception:
             db.session.rollback()
+    try:
+        db.session.execute(db.text("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP WITH TIME ZONE"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE rewards ADD COLUMN pinned_at TIMESTAMP"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
+def _reward_order():
+    """獎品排序：置頂的在最前（越晚置頂越前面），其餘照所需點數。"""
+    return (Reward.pinned_at.is_(None), Reward.pinned_at.desc(), Reward.points_required)
 
 
 # ── 管理員驗證（admin authentication / 管理員驗證）────────────────
@@ -253,7 +268,7 @@ def api_rewards():
     rewards = (
         Reward.query
         .filter_by(is_active=True)
-        .order_by(Reward.points_required)
+        .order_by(*_reward_order())
         .all()
     )
     return jsonify([r.to_dict() for r in rewards])
@@ -360,7 +375,7 @@ def api_admin_point():
 @app.route("/api/admin/rewards", methods=["GET"])
 @admin_required
 def api_admin_rewards_list():
-    rewards = Reward.query.order_by(Reward.points_required).all()
+    rewards = Reward.query.order_by(*_reward_order()).all()
     return jsonify([r.to_dict() for r in rewards])
 
 
@@ -414,8 +429,33 @@ def api_admin_reward_update(reward_id: int):
         reward.is_active = bool(data["is_active"])
     if "redemption_url" in data:
         reward.redemption_url = data["redemption_url"]
+    if "pinned" in data:
+        reward.pinned_at = tw_now() if data["pinned"] else None
     db.session.commit()
     return jsonify(reward.to_dict())
+
+
+@app.route("/api/admin/rewards/<int:reward_id>", methods=["DELETE"])
+@admin_required
+def api_admin_reward_delete(reward_id: int):
+    """後台：刪除獎品。有兌換記錄的預設擋下來，要帶 force 才連兌換記錄一起刪。"""
+    reward = db.session.get(Reward, reward_id)
+    if not reward:
+        return jsonify({"error": "找不到此獎品"}), 404
+    rd_count = reward.redemptions.count()
+    data = request.get_json(silent=True) or {}
+    if rd_count and not data.get("force"):
+        return jsonify({
+            "error": "此獎品有兌換記錄",
+            "need_confirm": True,
+            "name": reward.name,
+            "redemptions": rd_count,
+        }), 409
+    if rd_count:
+        Redemption.query.filter_by(reward_id=reward.id).delete()
+    db.session.delete(reward)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/admin/redemptions")
