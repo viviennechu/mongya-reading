@@ -586,6 +586,23 @@ def api_bot_member_points():
     return jsonify({"member_number": member_number, "display_name": member.display_name, "points": member.points})
 
 
+@app.route("/api/bot/member-by-gmail", methods=["GET"])
+def api_bot_member_by_gmail():
+    """LINE Bot 呼叫：用會員留的 Gmail 查 M 編號（大V 2026-11-24：綁定 LINE 時自動送點）。
+    只回 M 編號；一個 Gmail 對到好幾位（兄弟姊妹）就全部列出，由 bot 決定。"""
+    import hmac
+    secret = os.environ.get("BOT_API_SECRET", "")
+    if not secret:
+        return jsonify({"error": "未設定 BOT_API_SECRET"}), 500
+    if not hmac.compare_digest(request.headers.get("X-Bot-Secret", ""), secret):
+        return jsonify({"error": "unauthorized"}), 401
+    gmail = (request.args.get("gmail") or "").strip().lower()
+    if "@" not in gmail:
+        return jsonify({"error": "參數格式錯誤"}), 400
+    rows = Member.query.filter(db.func.lower(db.func.trim(Member.gmail)) == gmail).all()
+    return jsonify({"member_numbers": sorted(m.member_number for m in rows)})
+
+
 @app.route("/api/bot/reset-password", methods=["POST"])
 def api_bot_reset_password():
     """LINE Bot 呼叫：清除指定 M 編號的密碼，讓會員重新到網站設定（用 API Secret 驗證）。"""
