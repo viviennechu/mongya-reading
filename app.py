@@ -20,6 +20,9 @@ app.secret_key = os.environ["FLASK_SECRET_KEY"]
 database_url = os.environ["DATABASE_URL"]
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
+# 2026-11-24：新版 SQLAlchemy 的 postgresql:// 預設改用 psycopg 3，我們裝的是 psycopg2-binary → 明確指定
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
